@@ -1,0 +1,10 @@
+# dependencies
+/node_modules/
+
+# Expo
+/.expo/
+/dist/
+
+# local env files
+.qodo
+.env

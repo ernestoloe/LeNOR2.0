@@ -1,0 +1,44 @@
+{
+  "cli": {
+    "version": ">= 3.13.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "${EXPO_PUBLIC_SUPABASE_URL}",
+        "EXPO_PUBLIC_SUPABASE_KEY": "${EXPO_PUBLIC_SUPABASE_KEY}",
+        "EXPO_PUBLIC_OPENROUTER_API_KEY": "${EXPO_PUBLIC_OPENROUTER_API_KEY}",
+        "EXPO_PUBLIC_OPENROUTER_MODEL": "openai/gpt-4.1-mini",
+        "EXPO_PUBLIC_ZEP_URL": "${EXPO_PUBLIC_ZEP_URL}"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "${EXPO_PUBLIC_SUPABASE_URL}",
+        "EXPO_PUBLIC_SUPABASE_KEY": "${EXPO_PUBLIC_SUPABASE_KEY}",
+        "EXPO_PUBLIC_OPENROUTER_API_KEY": "${EXPO_PUBLIC_OPENROUTER_API_KEY}",
+        "EXPO_PUBLIC_OPENROUTER_MODEL": "openai/gpt-4.1-mini",
+        "EXPO_PUBLIC_ZEP_URL": "${EXPO_PUBLIC_ZEP_URL}"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "${EXPO_PUBLIC_SUPABASE_URL}",
+        "EXPO_PUBLIC_SUPABASE_KEY": "${EXPO_PUBLIC_SUPABASE_KEY}",
+        "EXPO_PUBLIC_OPENROUTER_API_KEY": "${EXPO_PUBLIC_OPENROUTER_API_KEY}",
+        "EXPO_PUBLIC_OPENROUTER_MODEL": "openai/gpt-4.1-mini",
+        "EXPO_PUBLIC_ZEP_URL": "${EXPO_PUBLIC_ZEP_URL}"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
