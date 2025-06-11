@@ -3,7 +3,7 @@ module.exports = {
     name: 'LéNOR',
     slug: 'lenor',
     owner: "eloe_inc",
-    version: '1.5.0',
+    version: '2.0.0',
     orientation: 'portrait',
     icon: './assets/lenor-icon.png',
     userInterfaceStyle: 'dark',
@@ -18,7 +18,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.lenor.app",
-      buildNumber: "15",
+      buildNumber: "20",
       infoPlist: {
         NSMicrophoneUsageDescription: "LéNOR necesita acceder al micrófono para el modo voz.",
         NSSpeechRecognitionUsageDescription: "LéNOR necesita procesar tu voz para convertirla a texto.",
@@ -33,7 +33,7 @@ module.exports = {
         backgroundColor: '#121212'
       },
       package: "com.lenor.app",
-      versionCode: 1,
+      versionCode: 2,
       permissions: [
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
@@ -46,7 +46,7 @@ module.exports = {
     },
     extra: {
       eas: {
-        projectId: "ad13ad60-a22b-4cbf-8e6f-0e7b6397c472"
+        projectId: "c311ef13-4c94-4b5d-8845-a15faa557627"
       }
     },
     plugins: [

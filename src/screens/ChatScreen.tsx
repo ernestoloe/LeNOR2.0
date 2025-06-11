@@ -274,7 +274,7 @@ const ChatScreen: React.FC = () => {
 
   return (
     <Container>
-      <Header title="LéNOR 1.5 - Chat" subtitle="Platica con LéNOR" />
+      <Header title="LéNOR 2.0 - Chat" subtitle="Platica con LéNOR" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}

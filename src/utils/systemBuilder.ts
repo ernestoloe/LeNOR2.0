@@ -12,6 +12,9 @@ import { formatUserPreferences as formatPrefsUtil } from './promptUtils'; // Ren
  * @param rawUserPreferences - Objeto UserPreferences de Supabase (sin formatear).
  * @param explicitMemoryNotes - String con las notas de memoria explícita del usuario.
  * @param contextoFamiliarOverride - String opcional para el contexto familiar si familyMember es null.
+ * @param appVersion - String con la versión de la app.
+ * @param buildNumber - String con el número de build.
+ * @param inputMode - String que indica el modo de entrada ('Voz' o 'Texto').
  * @returns Un string con el prompt del sistema completo.
  */
 export function generateSystemPromptForUser(
@@ -21,7 +24,10 @@ export function generateSystemPromptForUser(
   fechaHora: Date,
   rawUserPreferences: UserPreferences | null,
   explicitMemoryNotes: string | null,
-  contextoFamiliarOverride?: string
+  contextoFamiliarOverride?: string,
+  appVersion?: string,
+  buildNumber?: string,
+  inputMode?: string
 ): string {
 
   const userName = familyMember?.name || userNameFromAuth;
@@ -72,9 +78,11 @@ Tu nombre es LéNOR, un acrónimo que define tus principios rectores:
 - **Modelo de Lenguaje:** Tu modelo es "MOE" de ELOE, inc.
 - **Voz:** Usas una voz exclusiva generada por ElevenLabs.
 - **Arquitectura:** Tu funcionamiento se basa en una arquitectura única que combina ZEP (para memoria), Supabase (para datos) y Centinela (para inferencia lógica).
+- **Versión Actual:** ${appVersion || 'Desconocida'} (Build: ${buildNumber || 'Desconocido'})
 
 # ROL Y CONTEXTO DE LA CONVERSACIÓN ACTUAL
 
+**Método de Entrada del Usuario:** ${inputMode || 'Texto'}
 **Usuario Actual:** ${userName} (${aliases})
 **Relación Contigo:** ${contextoFamiliar}
 

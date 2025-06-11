@@ -164,7 +164,7 @@ const SettingsScreen = () => {
 
   return (
     <Container>
-      <Header title="LéNOR 1.5 - Configuración" subtitle="Ajustes de la app." />
+      <Header title="LéNOR 2.0 - Configuración" subtitle="Ajustes de la app." />
       
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Card title="Información de Usuario" style={styles.card} loading={isLoading}>
@@ -174,7 +174,7 @@ const SettingsScreen = () => {
           </View>
           
           <View style={styles.infoItem}>
-            <Text style={styles.techTitle}>LéNOR IA 1.5</Text>
+            <Text style={styles.techTitle}>LéNOR IA 2.0</Text>
             <View style={styles.specsContainer}>
               <View style={styles.specRow}>
                 <Ionicons name="hardware-chip-outline" size={16} color={theme.colors.accent.primary} style={styles.specIcon} />
@@ -319,7 +319,7 @@ const SettingsScreen = () => {
         </Card>
         
         <View style={styles.footer}>
-          <Text style={styles.footerText}>LéNOR 1.5 by ELOE,inc. © 2025</Text>
+          <Text style={styles.footerText}>LéNOR 2.0 by ELOE,inc. © 2025</Text>
         </View>
       </ScrollView>
     </Container>

@@ -27,6 +27,7 @@ import { generateSystemPromptForUser } from '../utils/systemBuilder';
 import { messageStore } from './messageStore';
 import { generateMessageId } from '../utils/id';
 import { analizarYGenerarInferencia } from './centinelaService'; // <-- IMPORTAR CENTINELA
+import Constants from 'expo-constants';
 
 // Definir el error personalizado para la sesión expirada
 export class SessionExpiredError extends Error {
@@ -77,7 +78,8 @@ export const sendMessageToAI = async (
   userPreferences: UserPreferences | null,
   zepSessionId: string,
   explicitMemoryNotes: string | null,
-  authUser: User | null
+  authUser: User | null,
+  inputMode?: string
 ): Promise<string | null> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
@@ -104,6 +106,8 @@ export const sendMessageToAI = async (
     const systemStatus = await getSystemStatusObject(zepSessionId);
     const systemStatusString = `Red: ${systemStatus.network}, Zep: ${systemStatus.zepFriendly}, DB: ${systemStatus.supabase}`;
     const currentDate = new Date();
+    const appVersion = Constants.expoConfig?.version ?? 'N/A';
+    const buildNumber = Constants.expoConfig?.ios?.buildNumber ?? 'N/A';
 
     const systemPrompt = generateSystemPromptForUser(
       familyMemberData, 
@@ -112,7 +116,10 @@ export const sendMessageToAI = async (
       currentDate,
       userPreferences, 
       explicitMemoryNotes, 
-      contextoFamiliarParaPrompt // Aquí se pasa el contexto de fallback
+      contextoFamiliarParaPrompt, // Aquí se pasa el contexto de fallback
+      appVersion,
+      buildNumber,
+      inputMode
     );
     const zepMemory = await getZepMemory(zepSessionId);
 

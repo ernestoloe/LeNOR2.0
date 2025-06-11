@@ -570,7 +570,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         userPreferences || DEFAULT_USER_PREFERENCES,
         zepSessionId,
         explicitMemoryNotes,
-        user
+        user,
+        'Texto'
       );
       
       success = true;

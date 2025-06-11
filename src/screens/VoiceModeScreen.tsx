@@ -189,7 +189,8 @@ const VoiceModeScreen: React.FC = () => {
             },
             zepSessionId,
             explicitMemoryNotes,
-            user
+            user,
+            'Voz'
           );
 
           if (aiResponseText) {
