@@ -1,8 +1,9 @@
-// ElevenLabs streaming TTS integrado con Audio de ELOE
-// import { Platform } from 'react-native'; // Eliminado por no usarse
+// ElevenLabs TTS simplificado - versión confiable
 import * as FileSystem from 'expo-file-system';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid, AVPlaybackStatus } from 'expo-av';
+import { fromByteArray } from 'base64-js';
 
+// Obtener las variables de entorno desde process.env (Expo las expone así)
 const API_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
 const API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY!;
 const VOICE_ID = process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_ID!;
@@ -66,8 +67,9 @@ export class ElevenLabsService {
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(`LéNOR TTS API error: ${response.status} - ${JSON.stringify(errData)}`);
+        let errData = '';
+        try { errData = JSON.stringify(await response.json()); } catch { errData = await response.text(); }
+        throw new Error(`LéNOR TTS API error: ${response.status} - ${errData}`);
       }
 
       // Obtener el stream completo primero
@@ -139,7 +141,7 @@ export class ElevenLabsService {
 
     if (this.tempFilePath) {
       try {
-      await FileSystem.deleteAsync(this.tempFilePath, { idempotent: true });
+        await FileSystem.deleteAsync(this.tempFilePath, { idempotent: true });
       } catch (error) {
         console.warn('Error eliminando archivo temporal:', error);
       }
@@ -148,12 +150,7 @@ export class ElevenLabsService {
   }
 
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+    return fromByteArray(new Uint8Array(buffer));
   }
 }
 

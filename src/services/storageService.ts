@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message } from '../types/chat';
-import { logError } from './loggingService';
 import { generateId } from '../utils/id';
 import { getTimestampFromMessageId } from '../utils/id';
 
@@ -83,7 +82,6 @@ export const loadMessagesFromStorage = async (
 
   } catch (error) {
     console.error('Error cargando mensajes del almacenamiento:', error);
-    logError(error, 'loadMessagesFromStorage');
     return [];
   }
 };
@@ -138,7 +136,6 @@ export const saveMessagesToStorage = async (
     console.log(`Guardados ${messagesToSave.length} mensajes para conversación ${conversationId}`);
   } catch (error) {
     console.error('Error guardando mensajes en almacenamiento:', error);
-    logError(error, 'saveMessagesToStorage');
   }
 };
 
@@ -176,7 +173,6 @@ export const setCurrentConversation = async (
     console.log(`Conversación actual establecida: ${conversationId}`);
   } catch (error) {
     console.error('Error estableciendo conversación actual:', error);
-    logError(error, 'setCurrentConversation');
   }
 };
 
@@ -197,7 +193,6 @@ export const getCurrentConversation = async (userId: string): Promise<string | n
     return conversationId;
   } catch (error) {
     console.error('Error obteniendo conversación actual:', error);
-    logError(error, 'getCurrentConversation');
     return null;
   }
 };
@@ -240,7 +235,6 @@ export const startNewConversation = async (userId: string): Promise<string> => {
     return conversationId;
   } catch (error) {
     console.error('Error iniciando nueva conversación:', error);
-    logError(error, 'startNewConversation');
     // Relanzar el error para que sea manejado por el llamador (AuthContext -> ConversationsScreen)
     throw error;
   }
@@ -252,67 +246,41 @@ export const startNewConversation = async (userId: string): Promise<string> => {
  */
 export const clearUserStorage = async (userId: string): Promise<void> => {
   try {
-    if (!userId) {
-      console.warn('clearUserStorage: userId no proporcionado');
-      return;
-    }
-    
-    // Obtener todas las claves
-    const allKeys = await AsyncStorage.getAllKeys();
-    
-    // Filtrar claves del usuario
-    const userPrefix = `${STORAGE_KEYS.MESSAGES_PREFIX}${userId}`;
-    const userKeys = allKeys.filter(key => key.startsWith(userPrefix));
-    
-    // Eliminar todas las claves del usuario
-    if (userKeys.length > 0) {
-      await AsyncStorage.multiRemove(userKeys);
-      console.log(`Eliminados ${userKeys.length} elementos de almacenamiento para usuario ${userId}`);
-    }
+    const keys = await AsyncStorage.getAllKeys();
+    const userKeys = keys.filter(key => key.startsWith(`${STORAGE_KEYS.MESSAGES_PREFIX}${userId}`));
+    await AsyncStorage.multiRemove(userKeys);
+    console.log(`Datos locales eliminados para el usuario ${userId}`);
   } catch (error) {
     console.error('Error limpiando almacenamiento del usuario:', error);
-    logError(error, 'clearUserStorage');
   }
 };
 
 /**
- * Guarda el timestamp de la última sincronización con el servidor
+ * Guarda la última hora de sincronización para un usuario
  * @param userId ID del usuario
- * @param timestamp Timestamp de la sincronización
+ * @param timestamp Timestamp de la última sincronización
  */
 export const saveLastSyncTime = async (userId: string, timestamp: number): Promise<void> => {
   try {
-    if (!userId) {
-      console.warn('saveLastSyncTime: userId no proporcionado');
-      return;
-    }
-    
-    const storageKey = `${STORAGE_KEYS.LAST_SYNC_TIME}${userId}`;
-    await AsyncStorage.setItem(storageKey, timestamp.toString());
+    const key = `${STORAGE_KEYS.LAST_SYNC_TIME}${userId}`;
+    await AsyncStorage.setItem(key, JSON.stringify(timestamp));
   } catch (error) {
-    console.error('Error guardando timestamp de sincronización:', error);
-    logError(error, 'saveLastSyncTime');
+    console.error('Error guardando la hora de última sincronización:', error);
   }
 };
 
 /**
- * Obtiene el timestamp de la última sincronización con el servidor
+ * Obtiene la última hora de sincronización para un usuario
  * @param userId ID del usuario
- * @returns Timestamp de la última sincronización o 0 si no hay ninguna
+ * @returns Timestamp de la última sincronización o 0 si no existe
  */
 export const getLastSyncTime = async (userId: string): Promise<number> => {
   try {
-    if (!userId) {
-      console.warn('getLastSyncTime: userId no proporcionado');
-      return 0;
-    }
-    
-    const storageKey = `${STORAGE_KEYS.LAST_SYNC_TIME}${userId}`;
-    const timestampStr = await AsyncStorage.getItem(storageKey);
-    return timestampStr ? parseInt(timestampStr, 10) : 0;
+    const key = `${STORAGE_KEYS.LAST_SYNC_TIME}${userId}`;
+    const value = await AsyncStorage.getItem(key);
+    return value ? JSON.parse(value) : 0;
   } catch (error) {
-    console.error('Error obteniendo timestamp de sincronización:', error);
-    logError(error, 'getLastSyncTime');
+    console.error('Error obteniendo la hora de última sincronización:', error);
     return 0;
   }
 };
@@ -387,7 +355,6 @@ export const updateConversationMetadata = async (
     console.log(`Metadatos actualizados para conversación ${conversationId}: ${metadata.messageCount} mensajes`);
   } catch (error) {
     console.error('Error actualizando metadatos de conversación:', error);
-    logError(error, 'updateConversationMetadata');
   }
 };
 
@@ -402,25 +369,11 @@ export const getConversationMetadata = async (
   conversationId: string
 ): Promise<ConversationMetadata | null> => {
   try {
-    if (!userId || !conversationId) {
-      console.warn('getConversationMetadata: faltan parámetros requeridos');
-      return null;
-    }
-    
-    // Clave para los metadatos
     const metadataKey = `${STORAGE_KEYS.MESSAGES_PREFIX}${userId}${STORAGE_KEYS.CONVERSATION_PREFIX}${conversationId}${STORAGE_KEYS.CONVERSATION_METADATA_SUFFIX}`;
-    
-    // Obtener metadatos
     const metadataJson = await AsyncStorage.getItem(metadataKey);
-    
-    if (!metadataJson) {
-      return null;
-    }
-    
-    return JSON.parse(metadataJson);
+    return metadataJson ? JSON.parse(metadataJson) : null;
   } catch (error) {
     console.error('Error obteniendo metadatos de conversación:', error);
-    logError(error, 'getConversationMetadata');
     return null;
   }
 };
@@ -428,34 +381,25 @@ export const getConversationMetadata = async (
 /**
  * Obtiene una lista de todas las conversaciones de un usuario
  * @param userId ID del usuario
- * @returns Lista de IDs de conversaciones
+ * @returns Array de IDs de conversación
  */
 export const getConversationList = async (userId: string): Promise<string[]> => {
   try {
-    if (!userId) {
-      console.warn('getConversationList: userId no proporcionado');
-      return [];
-    }
-    
-    // Obtener todas las claves
     const allKeys = await AsyncStorage.getAllKeys();
-    
-    // Prefijo para las conversaciones
-    const convPrefix = `${STORAGE_KEYS.MESSAGES_PREFIX}${userId}${STORAGE_KEYS.CONVERSATION_PREFIX}`;
-    
-    // Filtrar claves de metadatos de conversaciones
-    const metadataSuffix = STORAGE_KEYS.CONVERSATION_METADATA_SUFFIX;
-    const conversationMetadataKeys = allKeys.filter(key => 
-      key.startsWith(convPrefix) && key.endsWith(metadataSuffix)
+    const conversationKeys = allKeys.filter(key => 
+      key.startsWith(`${STORAGE_KEYS.MESSAGES_PREFIX}${userId}${STORAGE_KEYS.CONVERSATION_PREFIX}`) &&
+      !key.endsWith(STORAGE_KEYS.MESSAGES_SUFFIX) && 
+      !key.endsWith(STORAGE_KEYS.CONVERSATION_METADATA_SUFFIX)
     );
     
-    // Extraer IDs de conversación de las claves
-    return conversationMetadataKeys.map(key => 
-      key.substring(convPrefix.length, key.length - metadataSuffix.length)
-    );
+    const conversationIds = conversationKeys.map(key => {
+      const parts = key.split(STORAGE_KEYS.CONVERSATION_PREFIX);
+      return parts[parts.length - 1];
+    });
+    
+    return conversationIds;
   } catch (error) {
     console.error('Error obteniendo lista de conversaciones:', error);
-    logError(error, 'getConversationList');
     return [];
   }
 }; 

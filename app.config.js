@@ -1,8 +1,8 @@
 module.exports = {
   expo: {
     name: 'LéNOR',
-    slug: 'lenor',
-    owner: "eloe_inc",
+    slug: 'lenor2',
+    owner: "eloeinc",
     version: '2.0.0',
     orientation: 'portrait',
     icon: './assets/lenor-icon.png',
@@ -18,13 +18,13 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.lenor.app",
-      buildNumber: "20",
+      buildNumber: "23",
       infoPlist: {
         NSMicrophoneUsageDescription: "LéNOR necesita acceder al micrófono para el modo voz.",
         NSSpeechRecognitionUsageDescription: "LéNOR necesita procesar tu voz para convertirla a texto.",
         NSPhotoLibraryUsageDescription: "LéNOR necesita acceder a tu galería para que puedas seleccionar fotos.",
         NSCameraUsageDescription: "LéNOR necesita acceder a tu cámara si deseas tomar una foto para enviarla.",
-        "ITSAppUsesNonExemptEncryption": false
+        ITSAppUsesNonExemptEncryption: false
       }
     },
     android: {
@@ -49,15 +49,16 @@ module.exports = {
         projectId: "c311ef13-4c94-4b5d-8845-a15faa557627"
       }
     },
+    jsEngine: "jsc",
     plugins: [
+      "expo-font",
       [
         "@react-native-voice/voice",
         {
           "microphonePermission": "LéNOR necesita acceder al micrófono para el modo voz.",
           "speechRecognitionPermission": "LéNOR necesita procesar tu voz para convertirla a texto."
         }
-      ],
-      "expo-font"
+      ]
     ]
   }
-};
+}

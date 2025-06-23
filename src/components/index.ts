@@ -3,16 +3,9 @@
 
 export * from './Button';
 export * from './Card';
-import { Container } from './Container';
-import { Header } from './Header';
-import { Input } from './Input';
-import { MessageBubble } from './MessageBubble';
-import { TypingIndicator } from './TypingIndicator';
-
-export {
-  Container,
-  Header,
-  Input,
-  MessageBubble,
-  TypingIndicator,
-};
+export * from './Container';
+export * from './Header';
+export * from './MessageBubble';
+export * from './TypingIndicator';
+export { default as Input } from './Input';
+export { GlobalErrorBoundary } from './ErrorBoundary';

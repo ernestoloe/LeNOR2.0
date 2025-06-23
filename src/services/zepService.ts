@@ -2,7 +2,6 @@ import { ZepClient } from "@getzep/zep-js";
 // Importar tipos, usando un alias interno para Message
 // Importar también Message para usarlo como input type
 import type { Session, Message as ZepMessageInternal, Memory, Message, Summary } from "@getzep/zep-js/api";
-import { logError } from './loggingService';
 
 // Exportar tipos necesarios, usando el alias para Message consistentemente
 // También exportar ZepMessageInput que define la estructura para añadir mensajes
@@ -81,7 +80,6 @@ export const addMessageToSession = async (
     console.log('Mensaje añadido a Zep correctamente via SDK');
   } catch (error) {
     console.error('Error en addMessageToSession (SDK):', error);
-    logError(error, 'addMessageToSession_SDK');
     throw error; // Propagar el error para que sea manejado por el llamador
   }
 };
@@ -149,7 +147,6 @@ export const getSessionMemory = async (sessionId: string): Promise<{
     return { memories };
   } catch (error) {
     console.error('Error en getSessionMemory:', error);
-    logError(error, 'getSessionMemory');
     return null;
   }
 };
@@ -190,7 +187,6 @@ const createSession = async (sessionId: string): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error('Error en createSession:', error);
-    logError(error, 'createSession');
     return false;
   }
 };

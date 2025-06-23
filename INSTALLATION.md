@@ -1,6 +1,6 @@
-# Guía de Instalación y Uso - Soy ELOE
+# Guía de Instalación y Uso - LéNOR
 
-Este documento proporciona instrucciones paso a paso para instalar, configurar y utilizar la aplicación "Soy ELOE".
+Este documento proporciona instrucciones paso a paso para instalar, configurar y utilizar la aplicación "LéNOR".
 
 ## Instalación
 
@@ -25,7 +25,7 @@ Este documento proporciona instrucciones paso a paso para instalar, configurar y
 1. **Clonar el repositorio**
    ```bash
    git clone <url-del-repositorio>
-   cd soy-eloe
+   cd LeNOR
    ```
 
 2. **Instalar dependencias**
@@ -115,23 +115,23 @@ Este documento proporciona instrucciones paso a paso para instalar, configurar y
 
 ### Pantalla de Chat
 
-1. Esta es la pantalla principal donde puedes interactuar con ELOE
+1. Esta es la pantalla principal donde puedes interactuar con LéNOR
 2. Escribe tu mensaje en el campo de texto inferior
 3. Presiona "Enviar" para enviar tu mensaje
-4. Observa cómo ELOE responde con el efecto de typing
+4. Observa cómo LéNOR responde con el efecto de typing
 
 ### Modo de Voz
 
 1. Navega a la pestaña "Voice" en la barra inferior
 2. Presiona el botón del micrófono para comenzar a hablar
 3. Habla claramente y presiona nuevamente para detener la grabación
-4. ELOE procesará tu mensaje y responderá con voz
+4. LéNOR procesará tu mensaje y responderá con voz
 5. Presiona "Salir del Modo de Voz" para volver al chat y ver la conversación
 
 ### Perfil
 
 1. Navega a la pestaña "Profile" en la barra inferior
-2. Responde a las preguntas de Sí/No para personalizar cómo ELOE interactúa contigo
+2. Responde a las preguntas de Sí/No para personalizar cómo LéNOR interactúa contigo
 3. Presiona "Guardar Preferencias" para almacenar tus preferencias
 
 ### Configuración

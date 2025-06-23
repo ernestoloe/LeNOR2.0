@@ -1,4 +1,4 @@
-import { UserPreferences } from './supabase';
+import { UserPreferences } from '../types/user';
 
 /**
  * TYPES - Definiciones de las estructuras de datos que usa Centinela

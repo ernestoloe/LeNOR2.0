@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, KeyboardAvoidingView, ScrollView, Platform, Ima
 import { Container, Card, Input, Button } from '../components';
 import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
-import logoIconSource from '../../assets/lenor-icon.png';
+const logoIconSource = require('../../assets/lenor-icon.png');
 
 const AuthScreen: React.FC = () => {
   const { signIn, signUp, isLoading } = useAuth();

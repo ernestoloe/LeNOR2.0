@@ -49,25 +49,15 @@ const MainTabs = () => {
         },
       })}
     >
-      <Tab.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat' }} />
-      <Tab.Screen name="Conversations" component={ConversationsScreen} options={{ title: 'Conversaciones' }} />
-      <Tab.Screen name="VoiceMode" component={VoiceModeScreen} options={{ title: 'Modo Voz' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
+      <Tab.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat 2.0' }} />
+      <Tab.Screen name="Conversations" component={ConversationsScreen} options={{ title: 'Conversaciones 2.0' }} />
+      <Tab.Screen name="VoiceMode" component={VoiceModeScreen} options={{ title: 'Modo Voz 2.0' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil 2.0' }} />
       <Tab.Screen
         name="Settings"
         component={SettingsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" color={color} size={size} />
-          ),
-          headerTitle: 'Ajustes',
-          headerTitleAlign: 'center',
-          headerRight: () => null,
-          headerTitleStyle: {
-            color: theme.colors.text.primary,
-            fontFamily: theme.typography.fontFamily.primary,
-            fontSize: 20,
-          },
+          title: 'Ajustes 2.0',
         }}
       />
     </Tab.Navigator>

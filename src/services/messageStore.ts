@@ -1,11 +1,12 @@
 import { Message } from '../types/chat';
-import { logError } from './loggingService';
 import {
   loadMessagesFromStorage as loadFromStorage,
   saveMessagesToStorage as saveToStorage,
   getCurrentConversation as getCurrentConv,
+  saveMessageToStorage,
 } from './storageService';
 import { generateMessageId } from '../utils/id';
+import { supabase } from './supabaseClient';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const create = require('zustand/vanilla').default;
@@ -24,7 +25,8 @@ interface PaginationInfo {
 
 /**
  * Almacén global de mensajes para garantizar consistencia entre componentes
- * con soporte para almacenamiento local, paginación y conversaciones separadas
+ * con soporte para almacenamiento local, paginación, conversaciones separadas
+ * y sincronización con Supabase (últimos 20 mensajes)
  */
 class MessageStore {
   private messages: Message[] = [];
@@ -56,12 +58,19 @@ class MessageStore {
    */
   public initialize(): void {
     if (this.isInitialized) {
+      console.log('MessageStore: Ya inicializado');
       return;
     }
-    console.log('>>> MessageStore: Inicializando...');
+    
+    try {
+      console.log('MessageStore: Inicializando...');
     this.setupNetworkListener();
     this.isInitialized = true;
-    console.log('>>> MessageStore: Inicializado correctamente.');
+      console.log('MessageStore: Inicialización completada');
+    } catch (error) {
+      console.error('MessageStore: Error en inicialización:', error);
+      this.isInitialized = false;
+    }
   }
   
   /**
@@ -97,12 +106,90 @@ class MessageStore {
     this.pendingMessages = [];
     
     for (const pendingItem of pendingCopy) {
-      // Aquí iría la lógica para enviar el mensaje a Supabase, Zep, etc.
-      // Por ahora, solo notificamos del "éxito"
+      try {
       console.log(`>>> MessageStore: Procesando mensaje pendiente: ${pendingItem.message.id}`);
-      
-      // Para esta implementación, solo los marcamos como procesados
-      // En una implementación real, aquí habría lógica para enviarlos a APIs remotas
+        await this.saveMessageToSupabase(pendingItem.message);
+        console.log(`>>> MessageStore: Mensaje pendiente guardado en Supabase: ${pendingItem.message.id}`);
+      } catch (error) {
+        console.error(`>>> MessageStore: Error procesando mensaje pendiente ${pendingItem.message.id}:`, error);
+        // Si falla, volver a agregar a pendientes con retry incrementado
+        if (pendingItem.retryCount < 3) {
+          this.pendingMessages.push({
+            ...pendingItem,
+            retryCount: pendingItem.retryCount + 1
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Guarda un mensaje en Supabase (con rotación automática por trigger)
+   */
+  private async saveMessageToSupabase(message: Message): Promise<void> {
+    if (!this.currentUserId || !this.currentConversationId) {
+      throw new Error('Usuario o conversación no establecidos');
+    }
+
+    const { error } = await supabase
+      .from('chat_messages')
+      .insert({
+        id: message.id,
+        user_id: this.currentUserId,
+        conversation_id: this.currentConversationId,
+        content: message.text,
+        is_user: message.isUser,
+        created_at: new Date().toISOString()
+      });
+
+    if (error) {
+      throw new Error(`Error guardando mensaje en Supabase: ${error.message}`);
+    }
+  }
+
+  /**
+   * Carga mensajes desde Supabase (últimos 20 por conversación)
+   */
+  private async loadMessagesFromSupabase(): Promise<Message[]> {
+    if (!this.currentUserId || !this.currentConversationId) {
+      console.warn('>>> MessageStore: No hay usuario o conversación para cargar desde Supabase');
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('user_id', this.currentUserId)
+        .eq('conversation_id', this.currentConversationId)
+        .order('created_at', { ascending: true })
+        .limit(20);
+
+      if (error) {
+        console.error('>>> MessageStore: Error cargando mensajes desde Supabase:', error);
+        return [];
+      }
+
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      // Convertir formato Supabase a formato Message
+      const messages: Message[] = data.map(row => ({
+        id: row.id,
+        text: row.content,
+        isUser: row.is_user,
+        timestamp: new Date(row.created_at).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
+      }));
+
+      console.log(`>>> MessageStore: ${messages.length} mensajes cargados desde Supabase`);
+      return messages;
+    } catch (error) {
+      console.error('>>> MessageStore: Error en loadMessagesFromSupabase:', error);
+      return [];
     }
   }
   
@@ -118,7 +205,7 @@ class MessageStore {
   }
   
   /**
-   * Carga los mensajes desde el almacenamiento local
+   * Carga los mensajes desde el almacenamiento (AsyncStorage + Supabase)
    */
   async loadMessagesFromStorage(pageToLoad: number = 0): Promise<void> {
     if (!this.currentUserId) {
@@ -139,10 +226,33 @@ class MessageStore {
         }
       }
 
+      // Para la primera carga (página 0), intentar cargar desde Supabase primero
+      if (pageToLoad === 0 && this.isOnline) {
+        try {
+          const supabaseMessages = await this.loadMessagesFromSupabase();
+          if (supabaseMessages.length > 0) {
+            console.log(`>>> MessageStore: Usando ${supabaseMessages.length} mensajes desde Supabase`);
+            this.messages = supabaseMessages;
+            this.paginationInfo = {
+              ...this.paginationInfo,
+              currentPage: 0,
+              hasMore: false, // Supabase solo tiene los últimos 20
+            };
+            this.lastUpdateTime = Date.now();
+            this.notifyListeners('update');
+            this.notifyListeners('pagination');
+            return;
+          }
+        } catch (error) {
+          console.warn('>>> MessageStore: Error cargando desde Supabase, usando AsyncStorage:', error);
+        }
+      }
+
+      // Fallback a AsyncStorage (para historial más antiguo o cuando Supabase falla)
       const limit = this.paginationInfo.pageSize;
       const offset = pageToLoad * limit;
 
-      console.log(`>>> MessageStore: Cargando mensajes. Page: ${pageToLoad}, Limit: ${limit}, Offset: ${offset}`);
+      console.log(`>>> MessageStore: Cargando mensajes desde AsyncStorage. Page: ${pageToLoad}, Limit: ${limit}, Offset: ${offset}`);
 
       const loadedMessages = await loadFromStorage(
         this.currentUserId,
@@ -151,7 +261,7 @@ class MessageStore {
         offset
       );
 
-      console.log(`>>> MessageStore: ${loadedMessages.length} mensajes cargados desde storage.`);
+      console.log(`>>> MessageStore: ${loadedMessages.length} mensajes cargados desde AsyncStorage.`);
 
       if (pageToLoad === 0) {
         this.messages = loadedMessages; // Carga inicial, reemplaza los mensajes
@@ -171,7 +281,7 @@ class MessageStore {
       this.notifyListeners('update');
       this.notifyListeners('pagination');
     } catch (error: unknown) {
-      logError(error instanceof Error ? error : new Error(String(error)), 'MessageStore_loadMessagesFromStorage');
+      console.error('Error en MessageStore_loadMessagesFromStorage:', error instanceof Error ? error : new Error(String(error)));
       this.notifyListeners('error');
     }
   }
@@ -249,19 +359,36 @@ class MessageStore {
       this.messages = [...this.messages, message];
       
       this.lastUpdateTime = Date.now();
-      console.log(`>>> MessageStore: Mensaje agregado. ID: ${message.id}. Total: ${this.messages.length}`);
       
-      // Guardar en almacenamiento local si hay un usuario establecido
-      if (this.currentUserId) {
-        // Para los mensajes de IA, guardar con animateTyping: false
-        // const messageToSave = !message.isUser ? { ...message, animateTyping: false } : message;
-        // this.saveMessageToStorage(messageToSave); // NO USAR ESTE MÉTODO DIRECTAMENTE ASÍ
-        this.saveAllMessagesToStorage(); // USAR ESTE EN SU LUGAR PARA GUARDAR TODA LA CONVERSACIÓN ACTUALIZADA
+      // Guardar en AsyncStorage
+      this.saveMessageToStorage(message);
+
+      // Guardar en Supabase (con rotación automática por trigger)
+      if (this.isOnline) {
+        this.saveMessageToSupabase(message).catch(error => {
+          console.error('Error guardando mensaje en Supabase:', error);
+      
+          // Si falla, agregar a pendientes para reintento
+          const existingPending = this.pendingMessages.find(p => p.message.id === message.id);
+          if (!existingPending) {
+            this.pendingMessages.push({ message, retryCount: 0 });
+            console.log(`>>> MessageStore: Mensaje ${message.id} agregado a pendientes para Supabase`);
+          }
+        });
+      } else {
+        // Si estamos offline, agregar directamente a pendientes
+        const existingPending = this.pendingMessages.find(p => p.message.id === message.id);
+        if (!existingPending) {
+          this.pendingMessages.push({ message, retryCount: 0 });
+          console.log(`>>> MessageStore: Mensaje ${message.id} agregado a pendientes (offline)`);
+        }
       }
       
       this.notifyListeners('update');
-    } catch (error: unknown) {
-      logError(error instanceof Error ? error : new Error(String(error)), 'MessageStore_addMessage');
+      
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      console.error('Error en MessageStore_addMessage:', error.message);
       this.notifyListeners('error');
     }
   }
@@ -270,20 +397,14 @@ class MessageStore {
    * Guarda un mensaje en el almacenamiento local
    */
   private async saveMessageToStorage(message: Message): Promise<void> {
+    if (!this.currentUserId || !this.currentConversationId) {
+      console.warn("No se puede guardar el mensaje: falta userId o conversationId.");
+      return;
+    }
     try {
-      await saveToStorage(
-        this.currentUserId,
-        this.currentConversationId || 'default',
-        [message]
-      );
+      await saveToStorage(this.currentUserId, this.currentConversationId, [message], true);
     } catch (error) {
-      console.error('>>> MessageStore: Error guardando mensaje en almacenamiento local:', error);
-      
-      // Si fallamos al guardar localmente o no hay conexión, agregar a mensajes pendientes
-      if (!this.isOnline) {
-        this.pendingMessages.push({ message, retryCount: 0 });
-        console.log(`>>> MessageStore: Mensaje agregado a pendientes. Total pendientes: ${this.pendingMessages.length}`);
-      }
+      console.error('Error guardando mensaje individual en storage:', error);
     }
   }
   
@@ -313,7 +434,7 @@ class MessageStore {
       
       this.notifyListeners('update');
     } catch (error) {
-      logError(error, 'MessageStore_setMessages');
+      console.error('Error al establecer mensajes:', error);
       this.notifyListeners('error');
     }
   }
@@ -322,19 +443,14 @@ class MessageStore {
    * Guarda todos los mensajes en el almacenamiento local
    */
   private async saveAllMessagesToStorage(): Promise<void> {
+    if (!this.currentUserId || !this.currentConversationId) {
+      console.warn("No se pueden guardar todos los mensajes: falta userId o conversationId.");
+      return;
+    }
     try {
-      // Asegurar que los mensajes de IA se guarden con animateTyping: false
-      // y cualquier otro mensaje también, para evitar re-animación al cargar.
-      const messagesToSave = this.messages.map(msg =>
-        ({ ...msg, animateTyping: false }) // Siempre guardar con animateTyping: false
-      );
-      await saveToStorage(
-        this.currentUserId,
-        this.currentConversationId || 'default',
-        messagesToSave // Usar la lista modificada
-      );
-    } catch (error) {
-      console.error('>>> MessageStore: Error guardando todos los mensajes en almacenamiento local:', error);
+      await saveToStorage(this.currentUserId, this.currentConversationId, this.messages, false); // append = false
+    } catch(error) {
+      console.error('Error guardando todos los mensajes en storage:', error);
     }
   }
   
@@ -502,7 +618,12 @@ class MessageStore {
     if (messageIndex !== -1) {
       this.messages[messageIndex].animateTyping = false; // Detener la animación de "escribiendo"
       this.messages[messageIndex].hasBeenAnimated = true; // Marcar como completamente animado
-      this.saveAllMessagesToStorage(); // Guardar el estado final del mensaje en el almacenamiento
+      
+      // --- CORRECCIÓN: Guardar solo el mensaje finalizado, no todo. ---
+      const finalMessage = this.messages[messageIndex];
+      this.saveMessageToStorage(finalMessage);
+      // --- FIN DE LA CORRECCIÓN ---
+
       this.notifyListeners('update');
       console.log(`>>> MessageStore: Stream finalizado para el mensaje ${id}.`);
     }

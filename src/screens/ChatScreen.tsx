@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, TouchableOpacity, Image, Text } from 'react-native';
-import { Container, Header, MessageBubble, Input, Button } from '../components';
+import { Container, Header, Input, Button } from '../components';
+import { MessageBubble } from '../components/MessageBubble';
 import { Message } from '../types/chat';
 import { useAuth } from '../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { logError } from '../services/loggingService';
 import { messageStore } from '../services/messageStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { isVoiceMode } from '../services/settingsService';
 import { networkService as NetworkService } from '../services/networkService';
 import { useTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 
 // --- Definir la frase clave para guardar memoria --- 
-const MEMORY_KEYWORDS = ["guarda en memoria:", "memoria:"];
+const MEMORY_KEYWORDS = ["guarda en memoria:", "memoria:","Guarda en memoria:"];
 // -------------------------------------------------
 
 // Definir tipos para los mensajes renderizables
@@ -21,10 +22,9 @@ const MEMORY_KEYWORDS = ["guarda en memoria:", "memoria:"];
 
 const ChatScreen: React.FC = () => {
   const { 
-    messages, 
     sendMessage, 
     isLoading: isAuthLoading, 
-      addMemoryNote, 
+    addMemoryNote, 
     loadMoreMessages 
   } = useAuth();
   const theme = useTheme();
@@ -32,12 +32,11 @@ const ChatScreen: React.FC = () => {
   const styles = createStyles(theme);
 
   // Estado local que se usa para forzar re-renders cuando cambia el messageStore
-  const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  const [localMessages, setLocalMessages] = useState<Message[]>(messageStore.getMessages());
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
-  const prevMessagesLengthRef = useRef(0);
   
   // Referencias para control de estado
   const isConnected = useRef(NetworkService.getCurrentStatus());
@@ -45,78 +44,24 @@ const ChatScreen: React.FC = () => {
 
   // Efecto para suscribirse a los cambios en el messageStore
   useEffect(() => {
-    console.log('>>> ChatScreen: Iniciando...');
-    
-    // Obtener mensajes actuales del MessageStore
-    const currentMessages = messageStore.getMessages();
-    setLocalMessages(currentMessages);
-    console.log(`>>> ChatScreen: Estado inicial cargado. Mensajes: ${currentMessages.length}`);
-    
-    // Suscribirse a actualizaciones
-    const unsubscribe = messageStore.subscribe('update', (updatedMessages) => {
-      console.log(`>>> ChatScreen: MessageStore actualizado, nuevo count: ${updatedMessages.length}`);
-      setLocalMessages(updatedMessages);
-    });
-    
-    return () => {
-      console.log('>>> ChatScreen: Limpiando suscripción...');
-      unsubscribe();
-    };
+    const unsubscribe = messageStore.subscribe('update', setLocalMessages);
+    return () => unsubscribe();
   }, []);
 
-  // Usar los mensajes del MessageStore como fuente principal
-  const displayMessages = localMessages;
-  
-  // Manejar errores de mensajes
+  // Manejar errores de mensajes (solo para depuración)
   useEffect(() => {
-    if (!Array.isArray(displayMessages)) {
-      console.error('>>> ChatScreen: displayMessages no es un array:', typeof displayMessages);
-      logError(new Error(`displayMessages no es un array: ${typeof displayMessages}`), 'ChatScreen_displayMessages');
-    }
-  }, [displayMessages]);
-
-  // DEBUG: Log de mensajes en cada renderizado con información mejorada
-  useEffect(() => {
-    console.log(`>>> ChatScreen [RENDER]: Local Messages: ${localMessages.length}, Auth Messages: ${messages.length}`);
-    console.log(`>>> ChatScreen [RENDER]: Display Messages: ${displayMessages.length}`);
-    
-    if (displayMessages?.length > 0) {
-      console.log(`>>> ChatScreen [RENDER]: First message: ${JSON.stringify(displayMessages[0])}`);
-      console.log(`>>> ChatScreen [RENDER]: Last message: ${JSON.stringify(displayMessages[displayMessages.length - 1])}`);
-    }
-    
-    // Verificar si hay mensajes nulos o malformados
-    if (Array.isArray(displayMessages)) {
-      const invalidMessages = displayMessages.filter(msg => !msg || !msg.id || !msg.text);
+    if (!Array.isArray(localMessages)) {
+      console.error('>>> ChatScreen: localMessages no es un array:', typeof localMessages);
+    } else {
+      const invalidMessages = localMessages.filter(msg => !msg || !msg.id || !msg.text);
       if (invalidMessages.length > 0) {
-        const error = new Error(`Hay ${invalidMessages.length} mensajes inválidos`);
-        logError(error, "ChatScreen_invalidMessages");
-        console.warn("Mensajes inválidos:", invalidMessages);
+        console.warn(`>>> ChatScreen: Hay ${invalidMessages.length} mensajes inválidos en el store.`, invalidMessages);
       }
     }
-  }, [localMessages, messages, displayMessages]);
-
-  // Efecto para hacer scroll al final cuando llegan nuevos mensajes
-  useEffect(() => {
-    // Con FlatList inverted, el scroll automático al final para nuevos mensajes es manejado nativamente
-    // Este useEffect podría ser necesario solo para scrolls manuales o en casos muy específicos.
-    // Por ahora, lo mantenemos simple, ya que la inversión debería ayudar.
-    if (flatListRef.current && displayMessages.length > prevMessagesLengthRef.current) {
-        // No es necesario llamar a scrollToEnd({ animated: true }) explícitamente con inverted=true
-        // flatListRef.current?.scrollToEnd({ animated: true });
-    }
-    prevMessagesLengthRef.current = displayMessages.length;
-  }, [displayMessages]); 
+  }, [localMessages]);
 
   // Efectos al montar el componente
   useEffect(() => {
-    // Comprobar estado de VoiceMode
-    const checkVoiceMode = async () => {
-      await isVoiceMode();
-    };
-    
-    checkVoiceMode();
-    
     // Suscribirse a cambios de red
     const unsubscribeNetwork = NetworkService.addListener((connected: boolean) => {
       console.log(`ChatScreen: Estado de conexión cambiado a ${connected ? 'conectado' : 'desconectado'}`);
@@ -196,7 +141,7 @@ const ChatScreen: React.FC = () => {
       setIsSending(true);
       try {
         // Esta única llamada reemplaza toda la lógica anterior de subida y llamada a la IA.
-        await sendMessage(textToSend, imageUriToSend);
+        await sendMessage(textToSend, imageUriToSend, 'Texto');
 
       } catch (error) {
           // El contexto ya gestiona los errores de la IA y los muestra en el chat.
@@ -209,49 +154,57 @@ const ChatScreen: React.FC = () => {
       }
 
     } catch (error) {
-      logError(error, "handleSendMessage_critical");
+      console.error("Error crítico en handleSendMessage:", error);
       Alert.alert("Error", "Ha ocurrido un error fatal al enviar el mensaje. Por favor intenta nuevamente.");
       setIsSending(false);
     }
   };
 
-  const renderMessage = useCallback(({ item }: { item: Message }) => {
-    try {
-      // Verificación de validez del mensaje
-      if (!item || typeof item.text !== 'string') {
-        const errorMsg = `Mensaje inválido recibido en renderMessage: ${JSON.stringify(item)}`;
-        console.error(errorMsg);
-        logError(new Error(errorMsg), "renderMessage_invalidItem");
+  const renderMessageItem = useCallback(({ item }: { item: Message }) => {
+    // Validación robusta del mensaje
+    if (!item) {
+      console.warn('ChatScreen: Mensaje nulo recibido en renderMessageItem');
+      return null;
+    }
+    
+    if (!item.id || !item.text || typeof item.text !== 'string') {
+      console.error('ChatScreen: Mensaje inválido:', {
+        hasId: !!item.id,
+        hasText: !!item.text,
+        textType: typeof item.text,
+        item: item
+      });
+      return null;
+    }
+    
+    if (typeof item.isUser !== 'boolean') {
+      console.error('ChatScreen: Mensaje con isUser inválido:', item);
         return null;
       }
       
       return (
         <MessageBubble
+        key={item.id}
           messageObject={item}
         />
       );
-    } catch (error) {
-      logError(error, "renderMessage_critical");
-      return null;
-    }
   }, []);
 
-  const renderMessageList = () => (
+  return (
+    <Container>
+      <Header title="LéNOR 2.0 - Chat" subtitle="Platica con LéNOR" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={insets.top + 10}
+      >
     <FlatList
       ref={flatListRef}
-      data={displayMessages}
+      data={localMessages}
       keyExtractor={(item) => item.id}
-      renderItem={renderMessage}
+          renderItem={renderMessageItem}
       contentContainerStyle={styles.messagesContainer}
       inverted={true}
-      onContentSizeChange={() => {
-        // Con inverted, el scroll al inicio (que ahora es el final visual)
-        // para el primer mensaje ya no es tan directo como antes.
-        // La FlatList invertida maneja esto mejor.
-        // if (displayMessages.length === 1) { 
-        //     flatListRef.current?.scrollToEnd({animated: true});
-        // }
-      }}
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
@@ -263,24 +216,12 @@ const ChatScreen: React.FC = () => {
       maxToRenderPerBatch={10}
       windowSize={10}
       onEndReached={() => {
-        console.log(">>> ChatScreen: FlatList onEndReached triggered");
         if (messageStore.getPaginationInfo().hasMore) {
           loadMoreMessages();
         }
       }}
       onEndReachedThreshold={0.5}
     />
-  );
-
-  return (
-    <Container>
-      <Header title="LéNOR 2.0 - Chat" subtitle="Platica con LéNOR" />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingView}
-        keyboardVerticalOffset={insets.top + 10}
-      >
-        {renderMessageList()}
 
         {isSending && <ActivityIndicator style={styles.historyLoader} size="small" color={theme.colors.accent.primary} />}
 
@@ -306,11 +247,10 @@ const ChatScreen: React.FC = () => {
             editable={!isSending}
           />
           <Button
-            title="Enviar"
+            title={isSending ? "Enviando..." : "Enviar"} 
             onPress={handleSendMessage}
-            variant="primary"
-            size="medium"
             disabled={isSending || (inputText.trim() === '' && !selectedImageUri)}
+            style={styles.sendButton}
           />
         </View>
       </KeyboardAvoidingView>
@@ -318,7 +258,7 @@ const ChatScreen: React.FC = () => {
   );
 };
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   attachButton: {
     paddingHorizontal: theme.spacing.sm,
   },
@@ -383,6 +323,10 @@ const createStyles = (theme: any) => StyleSheet.create({
     flex: 1,
     marginRight: theme.spacing.sm,
   },
+  sendButton: {
+    marginLeft: theme.spacing.sm,
+  },
 });
 
 export default ChatScreen;
+

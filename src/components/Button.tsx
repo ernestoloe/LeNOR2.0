@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { theme } from '../theme';
 
 interface ButtonProps {
@@ -89,19 +89,23 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={disabled}
       activeOpacity={0.8}
     >
-      <View style={styles.buttonContent}>
-        {icon && <View style={styles.iconContainer}>{icon}</View>}
-        <Text
-          style={[
-            styles.buttonText,
-            getButtonTextStyle(),
-            getTextSizeStyle(),
-            disabled && styles.disabledButtonText,
-          ]}
-        >
-          {title}
-        </Text>
-      </View>
+      {disabled ? (
+        <ActivityIndicator color={variant === 'primary' ? theme.colors.text.primary : theme.colors.accent.primary} />
+      ) : (
+        <View style={styles.buttonContent}>
+          {icon && <View style={styles.iconContainer}>{icon}</View>}
+          <Text
+            style={[
+              styles.buttonText,
+              getButtonTextStyle(),
+              getTextSizeStyle(),
+              disabled && styles.disabledButtonText,
+            ]}
+          >
+            {title}
+          </Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 };

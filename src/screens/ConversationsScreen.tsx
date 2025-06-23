@@ -17,7 +17,6 @@ import { Header } from '../components';
 import { theme } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { networkService as NetworkService } from '../services/networkService';
-import { logError } from '../services/loggingService';
 
 // Tipo para una conversación
 interface Conversation {
@@ -146,7 +145,6 @@ const ConversationsScreen = () => {
       setConversations(conversationList);
     } catch (error) {
       console.error('Error cargando conversaciones:', error);
-      logError(error, 'loadConversations');
       Alert.alert('Error', 'No se pudieron cargar las conversaciones');
     } finally {
       setIsLoading(false);
@@ -176,7 +174,6 @@ const ConversationsScreen = () => {
       navigation.navigate('Chat' as never);
     } catch (error) {
       console.error('Error seleccionando conversación:', error);
-      logError(error, 'handleSelectConversation');
       Alert.alert('Error', 'No se pudo seleccionar la conversación');
     }
   };
@@ -188,7 +185,6 @@ const ConversationsScreen = () => {
       navigation.navigate('Chat' as never);
     } catch (error) {
       console.error('Error creando nueva conversación:', error);
-      logError(error, 'handleNewConversation');
       Alert.alert('Error', 'No se pudo crear una nueva conversación');
     }
   };
@@ -229,7 +225,6 @@ const ConversationsScreen = () => {
               await loadConversations();
             } catch (error) {
               console.error('Error eliminando conversación:', error);
-              logError(error, 'handleDeleteConversation');
               Alert.alert('Error', 'No se pudo eliminar la conversación');
             }
           }

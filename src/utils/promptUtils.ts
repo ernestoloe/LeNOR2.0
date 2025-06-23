@@ -1,4 +1,4 @@
-import { UserPreferences } from '../services/supabase';
+import { UserPreferences } from '../types/user';
 
 // Función para formatear las preferencias del usuario en un formato legible para la IA
 export const formatUserPreferences = (preferences: UserPreferences | null): string => {

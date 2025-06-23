@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Switch, ScrollView, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { Container, Header, Card, Button } from '../components';
-import { theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
-import { UserPreferences } from '../services/supabase';
+import { UserPreferences } from '../types/user';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 
 const LAST_SAVED_KEY = 'user_preferences_last_saved_timestamp';
 
@@ -17,6 +18,8 @@ const formatLastSavedTimestamp = (timestamp: number | null): string | null => {
 
 const ProfileScreen = () => {
   const { userPreferences, updatePreferences, isLoading: authLoading } = useAuth();
+  const theme = useTheme();
+  const styles = createStyles(theme);
   
   // Estado local para todas las preferencias, incluyendo los nuevos campos de texto
   const [localPreferences, setLocalPreferences] = useState<UserPreferences>(() => {
@@ -234,7 +237,7 @@ const ProfileScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   booleanPreferencesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

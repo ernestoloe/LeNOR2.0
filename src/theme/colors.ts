@@ -6,11 +6,11 @@ export const colors = {
     tertiary: '#2A2A2A', // Gris para Cards/componentes
   },
   
-  // Accent colors (TURQUESA LÉNOR - Más oscuro)
+  // Accent colors (AZUL ACERO)
   accent: {
-    primary: '#20C2B3', // Turquesa principal más oscuro
-    secondary: '#1AA093', // Turquesa aún más oscuro
-    tertiary: '#4DD1C4', // Turquesa más claro (ajustado)
+    primary: '#508CB4', // Azul acero principal
+    secondary: '#3E6B8A', // Azul acero más oscuro
+    tertiary: '#73A5C6', // Azul acero más claro
   },
   
   // Text colors
@@ -39,12 +39,12 @@ export const colors = {
     input: {
       background: '#1C1C1C', // Valor de background.secondary
       border: '#444444', // Borde gris
-      focusBorder: '#20C2B3', // Usar nuevo turquesa principal
+      focusBorder: '#508CB4', // Usar nuevo azul principal
     },
     button: {
-      primary: '#20C2B3', // Usar nuevo turquesa principal
+      primary: '#508CB4', // Usar nuevo azul principal
       secondary: '#4A4A4A', // Botón secundario gris oscuro
-      outlineBorder: '#20C2B3', // Usar nuevo turquesa principal
+      outlineBorder: '#508CB4', // Usar nuevo azul principal
       disabled: '#3A3A3A', // Fondo deshabilitado
     },
   },

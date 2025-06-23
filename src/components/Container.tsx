@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, ViewStyle, ImageBackground, View, ViewProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../theme';
-import watermarkSource from '../../assets/lenor-icon.png';
+const watermarkSource = require('../../assets/lenor-icon.png');
 
 interface ContainerProps extends ViewProps {
   children: React.ReactNode;

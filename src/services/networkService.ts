@@ -1,5 +1,4 @@
 import NetInfo, { NetInfoState, NetInfoSubscription } from '@react-native-community/netinfo';
-import { logError, captureMessage } from './loggingService';
 
 type ConnectionCallback = (isConnected: boolean) => void;
 
@@ -29,7 +28,7 @@ export class NetworkService {
       this.netInfoUnsubscribe = NetInfo.addEventListener(this.handleConnectionChange);
       console.log('>>> NetworkService: Monitoreo de conectividad iniciado');
     } catch (error) {
-      logError(error, 'NetworkService_initialize');
+      console.error('Error en NetworkService_initialize:', error);
     }
   }
   
@@ -47,12 +46,9 @@ export class NetworkService {
         
         // Notificar a los listeners
         this.notifyListeners();
-        
-        // Registrar para diagnóstico
-        captureMessage(`Cambio en conexión: ${connected ? 'CONECTADO' : 'DESCONECTADO'}`);
       }
     } catch (error) {
-      logError(error, 'NetworkService_handleConnectionChange');
+      console.error('Error en NetworkService_handleConnectionChange:', error);
     }
   };
   
@@ -109,7 +105,4 @@ export class NetworkService {
 }
 
 // Exportar una única instancia
-export const networkService = new NetworkService();
-
-// Inicializar inmediatamente
-networkService.initialize(); 
+export const networkService = new NetworkService(); 

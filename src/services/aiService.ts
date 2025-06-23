@@ -3,7 +3,7 @@
 // import { OPENROUTER_API_KEY, AI_TEMPERATURE, AI_MAX_TOKENS, OPENROUTER_MODEL } from '@env';
 // import axios from 'axios'; // Eliminado
 // import { AIResponse } from '../types/chat'; // Eliminado
-import { UserPreferences, User } from '../services/supabase'; // Se eliminó supabase de la importación, AÑADIDO User
+import { UserPreferences, User, FamilyMember } from '../types/user';
 // import { formatUserPreferences, getTemporalContextValues } from '../utils/promptUtils'; // Importar buildDynamicPrompt y las otras necesarias
 // Eliminar la importación de generateEmbedding
 // import { generateEmbedding } from './embeddingService';
@@ -14,7 +14,7 @@ import { UserPreferences, User } from '../services/supabase'; // Se eliminó sup
 // import { getZepMemory } from './zepService'; // Se eliminaron ZepMessage y GetMemoryResponse
 import { getZepMemory, addMessageToSession } from './zepService';
 import { getSystemStatusObject } from './cortexService';
-import { getFamilyMemberDataByEmail } from './familyContext'; // Usar esta en su lugar
+import { getFamilyMemberByEmailFromDB } from './appDataService';
 
 // --- IMPORTAR INSTRUCCIONES Y REGLAS (AHORA ESTÁTICO) ---
 // import { systemInstructions } from '../ai/system'; // YA NO SE USAN
@@ -28,6 +28,7 @@ import { messageStore } from './messageStore';
 import { generateMessageId } from '../utils/id';
 import { analizarYGenerarInferencia } from './centinelaService'; // <-- IMPORTAR CENTINELA
 import Constants from 'expo-constants';
+import { Alert } from 'react-native';
 
 // Definir el error personalizado para la sesión expirada
 export class SessionExpiredError extends Error {
@@ -93,7 +94,7 @@ export const sendMessageToAI = async (
     }
 
     // 1. Construir el contexto para la IA
-    const familyMemberData = authUser ? getFamilyMemberDataByEmail(authUser.email) : null;
+    const familyMemberData: FamilyMember | null = authUser ? await getFamilyMemberByEmailFromDB(authUser.email) : null;
     const userEmailForPrompt = authUser?.email || '';
     
     // --- INICIO: LÓGICA PARA NUEVOS USUARIOS ---
@@ -155,6 +156,10 @@ export const sendMessageToAI = async (
     const userMessageForApi = { role: 'user', content: userApiMessageContent };
     
     const messagesForAPI = [systemMessage, ...historyMessages, userMessageForApi];
+
+    if (process.env.EXPO_PUBLIC_OPENROUTER_MODEL) {
+      messagesForAPI.unshift({ role: 'system', content: systemPrompt });
+    }
 
     const openRouterModel = process.env.EXPO_PUBLIC_OPENROUTER_MODEL || 'openai/gpt-4.1-mini';
 

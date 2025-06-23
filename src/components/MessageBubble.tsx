@@ -1,133 +1,231 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, ViewStyle, Image } from 'react-native';
-import { theme } from '../theme';
-import { simulateTyping } from '../utils/chatUtils';
-import { messageStore } from '../services/messageStore';
-import { Message } from '../types/chat';
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { Message } from "../types/chat";
+import { useTheme } from "../contexts/ThemeContext";
+import { Theme } from "../theme";
+import Markdown from 'react-native-markdown-display';
+import * as Clipboard from 'expo-clipboard';
+import { Ionicons } from '@expo/vector-icons';
 
-interface MessageBubbleProps {
+type Props = {
   messageObject: Message;
-  timestamp?: string;
-  style?: ViewStyle;
-  localImageUri?: string | null;
-}
+};
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
-  messageObject,
-  timestamp,
-  style,
-  localImageUri,
-}) => {
-  const { id: messageId, text: message, isUser, animateTyping, hasBeenAnimated, timestamp: msgTimestamp, localImageUri: msgLocalImageUri } = messageObject;
-  
-  const [displayedText, setDisplayedText] = useState('');
-  const cleanupRef = useRef<(() => void) | null>(null);
+export const MessageBubble: React.FC<Props> = ({ messageObject }) => {
+  const { id, text, isUser, animateTyping } = messageObject;
+  const theme = useTheme();
+  const styles = createStyles(theme);
+  const [showCopyButton, setShowCopyButton] = useState(false);
 
-  useEffect(() => {
-    if (!isUser && animateTyping && !hasBeenAnimated) {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-      }
-      setDisplayedText('');
-      cleanupRef.current = simulateTyping(
-        message,
-        (partialText) => {
-          setDisplayedText(partialText);
-        },
-        (fullText) => {
-          setDisplayedText(fullText);
-          cleanupRef.current = null;
-          messageStore.markAsAnimated(messageId);
-        },
-        3
-      );
-    } else {
-      setDisplayedText(message);
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
-      }
-    }
-
-    return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
+  const handleCopyText = async () => {
+    try {
+      await Clipboard.setStringAsync(text);
+      Alert.alert("✅ Copiado", "Texto copiado al portapapeles");
+      setShowCopyButton(false);
+    } catch (error) {
+      Alert.alert("❌ Error", "No se pudo copiar el texto");
       }
     };
-  }, [messageId, message, isUser, animateTyping, hasBeenAnimated]);
 
-  const currentTimestamp = timestamp || msgTimestamp;
-  const currentLocalImageUri = localImageUri || msgLocalImageUri;
-
+  // Si es del usuario, renderizar con burbuja
+  if (isUser) {
   return (
-    <View style={[styles.container, isUser ? styles.userContainer : styles.botContainer, style]}>
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.botBubble]}>
-        {currentLocalImageUri && (
-          <Image source={{ uri: currentLocalImageUri }} style={styles.bubbleImage} />
-        )}
-        {displayedText && displayedText.trim() !== '' && (
-          <Text selectable={true} style={[styles.messageText, isUser ? styles.userMessageText : styles.botMessageText]}>
-            {displayedText}
-          </Text>
-        )}
+      <View style={styles.userBubble}>
+        <Text style={styles.userText}>{text}</Text>
       </View>
-      {currentTimestamp && (
-        <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.botTimestamp]}>
-          {currentTimestamp}
-        </Text>
+    );
+  }
+
+  // Si es de la IA, renderizar sin burbuja, solo texto con formato markdown
+  return (
+    <TouchableOpacity 
+      style={styles.aiPlainContainer}
+      onPress={() => setShowCopyButton(!showCopyButton)}
+      activeOpacity={0.7}
+    >
+      <Markdown style={markdownStyles(theme)}>
+        {text}
+      </Markdown>
+      
+      {showCopyButton && (
+        <TouchableOpacity 
+          style={styles.copyButton}
+          onPress={handleCopyText}
+        >
+          <Ionicons name="copy-outline" size={16} color={theme.colors.text.secondary} />
+          <Text style={styles.copyButtonText}>Copiar</Text>
+        </TouchableOpacity>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
-const styles = StyleSheet.create({
-  botBubble: {
-    backgroundColor: theme.colors.ui.card,
-  },
-  botContainer: {
-    alignSelf: 'flex-start',
-  },
-  botMessageText: {
+
+
+// Estilos para markdown con colores y formato
+const markdownStyles = (theme: Theme) => ({
+  body: {
     color: theme.colors.text.primary,
+    fontSize: 16,
+    lineHeight: 24,
+    fontFamily: 'System',
   },
-  botTimestamp: {
-    alignSelf: 'flex-start',
-    color: theme.colors.text.tertiary,
+  heading1: {
+    color: theme.colors.text.primary,
+    fontSize: 24,
+    fontWeight: 'bold' as 'bold',
+    marginVertical: 8,
   },
-  bubble: {
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.md,
+  heading2: {
+    color: theme.colors.text.primary,
+    fontSize: 20,
+    fontWeight: 'bold' as 'bold',
+    marginVertical: 6,
   },
-  bubbleImage: {
-    aspectRatio: 16 / 9,
-    borderRadius: theme.borderRadius.sm,
-    marginBottom: theme.spacing.sm,
-    width: '100%',
+  heading3: {
+    color: theme.colors.text.primary,
+    fontSize: 18,
+    fontWeight: 'bold' as 'bold',
+    marginVertical: 4,
   },
-  container: {
-    marginVertical: theme.spacing.xs,
-    maxWidth: '80%',
+  paragraph: {
+    color: theme.colors.text.primary,
+    fontSize: 16,
+    lineHeight: 24,
+    marginVertical: 4,
   },
-  messageText: {
-    ...theme.typography.styles.body1,
+  strong: {
+    color: theme.colors.text.primary,
+    fontWeight: 'bold' as 'bold',
   },
-  timestamp: {
-    ...theme.typography.styles.caption,
-    marginHorizontal: theme.spacing.sm,
-    marginTop: theme.spacing.xs,
+  em: {
+    color: theme.colors.text.primary,
+    fontStyle: 'italic' as 'italic',
   },
+  code_inline: {
+    backgroundColor: theme.colors.background.tertiary,
+    color: theme.colors.accent.primary,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  code_block: {
+    backgroundColor: theme.colors.background.tertiary,
+    color: theme.colors.text.primary,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.accent.primary,
+  },
+  fence: {
+    backgroundColor: theme.colors.background.tertiary,
+    color: theme.colors.text.primary,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.accent.primary,
+  },
+  list_item: {
+    color: theme.colors.text.primary,
+    fontSize: 16,
+    lineHeight: 24,
+    marginVertical: 2,
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  ordered_list: {
+    marginVertical: 4,
+  },
+  blockquote: {
+    backgroundColor: theme.colors.background.secondary,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.accent.primary,
+    paddingLeft: 12,
+    paddingVertical: 8,
+    marginVertical: 8,
+    fontStyle: 'italic',
+  },
+  link: {
+    color: theme.colors.accent.primary,
+    textDecorationLine: 'underline' as 'underline',
+  },
+  table: {
+    borderWidth: 1,
+    borderColor: theme.colors.text.secondary,
+    marginVertical: 8,
+  },
+  thead: {
+    backgroundColor: theme.colors.background.secondary,
+  },
+  th: {
+    color: theme.colors.text.primary,
+    fontWeight: 'bold' as 'bold',
+    padding: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.text.secondary,
+  },
+  td: {
+    color: theme.colors.text.primary,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.text.secondary,
+  },
+});
+
+const createStyles = (theme: Theme) => StyleSheet.create({
   userBubble: {
-    backgroundColor: theme.colors.accent.primary,
+    alignSelf: "flex-end",
+    backgroundColor: theme.colors.ui.button.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    maxWidth: "80%",
+    marginVertical: 4,
+    shadowColor: theme.colors.background.primary,
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
   },
-  userContainer: {
-    alignSelf: 'flex-end',
+  userText: {
+    color: theme.colors.text.onAccent,
+    fontSize: 16,
+    fontWeight: "500",
   },
-  userMessageText: {
-    color: theme.colors.background.primary,
+  aiPlainContainer: {
+    alignSelf: "flex-start",
+    maxWidth: "95%",
+    marginVertical: 4,
+    paddingHorizontal: 0, // Sin padding para que sea texto plano
+    position: 'relative', // Para posicionar el botón de copiar
   },
-  userTimestamp: {
-    alignSelf: 'flex-end',
-    color: theme.colors.text.tertiary,
+  copyButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background.secondary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: theme.colors.background.primary,
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  copyButtonText: {
+    color: theme.colors.text.secondary,
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
   },
 });

@@ -6,53 +6,62 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
-  Platform, // Necesario para permisos
-  // eslint-disable-next-line react-native/split-platform-components
-  PermissionsAndroid, // Necesario para permisos en Android
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
-import { Header } from '../components'; // Restaurar importación de Header
+import { Header } from '../components';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice'; // Se eliminó SpeechRecognizedEvent
+import Voice, { SpeechResultsEvent, SpeechErrorEvent } from '@react-native-voice/voice';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av'; // Restaurar para permisos de audio
-import { theme } from '../theme';
+import { Audio } from 'expo-av';
+import { useTheme } from '../contexts/ThemeContext';
+import { Theme } from '../theme';
 import { useAuth } from '../contexts/AuthContext';
-import { sendMessageToAI as callSendMessageToAI, AIMessage } from '../services/aiService'; // Renombrar para evitar conflicto con sendMessage de Zep
-import { elevenLabsService } from '../services/elevenLabsService'; // Importar la instancia del servicio
-// import { logError } from '../services/loggingService'; // logError no se usa
-import iconLeNOR from '../../assets/lenor-icon.png';
-import { generateMessageId } from '../utils/id';
-import { useNavigation } from '@react-navigation/native'; // Restaurar para navegación
-// import TextToSpeech from '../services/TextToSpeech'; // Implied import for TextToSpeech
-import * as Speech from 'expo-speech'; // Importar expo-speech
-import { supabase } from '../services/supabase'; // Importar supabase
-import { messageStore } from '../services/messageStore'; // Importar messageStore
+import { elevenLabsService } from '../services/elevenLabsService';
+import { useNavigation } from '@react-navigation/native';
+import { Message } from '../types/chat';
+import { messageStore } from '../services/messageStore';
+
+// En React Native (con Metro), los assets estáticos como las imágenes DEBEN cargarse con require().
+// Usar 'import' es un patrón de web que aquí resulta en un error, ya que Metro no lo transpila para imágenes.
+// La función require() devuelve un ID numérico del recurso en el build. Si la ruta es inválida,
+// puede devolver null/undefined, lo que provoca un crash nativo fatal en iOS al ser pasado
+// a un componente <Image> sin ser validado. Este bloque protege esa llamada.
+let lenorIcon: number | null = null;
+try {
+  lenorIcon = require('../../assets/lenor-icon.png');
+} catch (error) {
+  console.error("CRITICAL: Fallo al cargar el asset 'lenor-icon.png'.", error);
+}
 
 enum VoiceModeState {
   Idle = 'IDLE',
   Listening = 'LISTENING',
   Processing = 'PROCESSING',
+  GeneratingAudio = 'GENERATING_AUDIO',
   Speaking = 'SPEAKING',
   Error = 'ERROR'
 }
 
 const VoiceModeScreen: React.FC = () => {
   const { 
-      userPreferences, 
-      addMessage,
+      userPreferences,
+      sendMessage,
       zepSessionId,
       isLoading: isAuthLoading,
-      user_id: userId,
-      user,
-      explicitMemoryNotes,
   } = useAuth();
-  const navigation = useNavigation(); // Hook de navegación
+  const navigation = useNavigation();
+  const theme = useTheme();
+  const componentStyles = styles(theme);
   
   const [voiceState, setVoiceState] = useState<VoiceModeState>(VoiceModeState.Idle);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
-  // const [isMounted, setIsMounted] = useState(true); // No se usa
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const lastPlayedMessageId = useRef<string | null>(null);
+
+  const voiceStateRef = useRef(voiceState);
+  voiceStateRef.current = voiceState;
 
   useEffect(() => {
     Voice.onSpeechResults = (e: SpeechResultsEvent) => {
@@ -62,24 +71,20 @@ const VoiceModeScreen: React.FC = () => {
     };
     Voice.onSpeechError = (e: SpeechErrorEvent) => {
       console.error('Voice.onSpeechError:', e.error);
-
-      // Manejo específico para el error "No speech detected"
       const noSpeechMessage = "No speech detected";
       if (e.error?.message?.includes(noSpeechMessage)) {
         setError("No te escuché. Toca el ícono para intentarlo de nuevo.");
       } else {
         setError(e.error?.message || 'Error en reconocimiento de voz');
       }
-      
       setVoiceState(VoiceModeState.Idle);
     };
     return () => {
       Voice.destroy().then(Voice.removeAllListeners).catch(e => console.error("Error en Voice.destroy en cleanup:", e));
-      elevenLabsService.stopPlayback(); // Usar el método de la instancia del servicio
+      elevenLabsService.stopPlayback();
     };
   }, []);
 
-  // Pulse for processing and responding
   useEffect(() => {
     if (voiceState === VoiceModeState.Processing || voiceState === VoiceModeState.Speaking) {
       Animated.loop(
@@ -93,19 +98,51 @@ const VoiceModeScreen: React.FC = () => {
     }
   }, [voiceState, pulseAnim]);
 
+  useEffect(() => {
+    const handleNewMessage = (messages: Message[]) => {
+      if (!messages || !Array.isArray(messages) || messages.length === 0) return;
+      if (voiceStateRef.current !== VoiceModeState.Processing) return;
+      
+      const lastAIMessage = messages.find(msg => 
+        msg && !msg.isUser && msg.id && msg.text && msg.id !== lastPlayedMessageId.current
+      );
+
+      if (lastAIMessage) {
+        setVoiceState(VoiceModeState.GeneratingAudio);
+        lastPlayedMessageId.current = lastAIMessage.id;
+        
+        elevenLabsService.streamTextToSpeech(
+          lastAIMessage.text,
+          () => setVoiceState(VoiceModeState.Speaking),
+          () => {
+            setVoiceState(VoiceModeState.Idle);
+            setError(null);
+          },
+          (err) => {
+            console.error("Error en reproducción de audio:", err);
+            setError('Error al reproducir la respuesta.');
+            setVoiceState(VoiceModeState.Error);
+            setTimeout(() => {
+              setError(null);
+              setVoiceState(VoiceModeState.Idle);
+            }, 3000);
+          }
+        );
+      } else {
+        if (voiceStateRef.current === VoiceModeState.Processing) {
+          setVoiceState(VoiceModeState.Idle);
+        }
+      }
+    };
+
+    const unsubscribe = messageStore.subscribe('update', handleNewMessage);
+    return () => unsubscribe();
+  }, []);
+
   const requestAudioPermission = async () => {
     if (Platform.OS === 'android') {
       try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: "Permiso de Micrófono",
-            message: "LéNOR necesita acceso a tu micrófono para el modo voz.",
-            buttonNeutral: "Pregúntame Luego",
-            buttonNegative: "Cancelar",
-            buttonPositive: "OK"
-          }
-        );
+        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       } catch (err) {
         console.warn(err);
@@ -133,10 +170,11 @@ const VoiceModeScreen: React.FC = () => {
       setVoiceState(VoiceModeState.Listening);
       setError(null);
       setTranscript('');
-      await Voice.start('es-MX');
+      const locale = userPreferences?.voice_locale || 'es-MX';
+      await Voice.start(locale);
     } catch (e) {
       console.error('Error al iniciar Voice.start', e);
-      setError('Error al iniciar escucha');
+      setError('No se pudo iniciar el reconocimiento de voz.');
       setVoiceState(VoiceModeState.Idle);
     }
   };
@@ -146,70 +184,14 @@ const VoiceModeScreen: React.FC = () => {
       setVoiceState(VoiceModeState.Processing);
       await Voice.stop();
       const currentTranscript = transcript.trim(); 
-      setTranscript(''); // Limpiar para la próxima vez
+      setTranscript('');
 
-      if (!zepSessionId || !userId) {
-          setError('Error interno: Sesión o usuario perdido.');
-          setVoiceState(VoiceModeState.Idle);
-          return;
+      if (!currentTranscript) {
+        setVoiceState(VoiceModeState.Idle);
+        return;
       }
 
-      if (currentTranscript) { 
-        const userMessageId = generateMessageId(userId);
-        
-        // Añadir el mensaje del usuario a la UI para que se vea en el chat
-        messageStore.addMessage({
-          id: userMessageId,
-          text: currentTranscript,
-          isUser: true,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        });
-        
-        setVoiceState(VoiceModeState.Processing); // Permanece en procesamiento
-
-        const userMessageForAI: AIMessage = {
-            id: userMessageId,
-            text: currentTranscript,
-            isUser: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            senderId: userId,
-            role: 'user'
-        };
-
-        try {
-          const aiResponseText = await callSendMessageToAI(
-            userMessageForAI,
-            userPreferences || {
-              empathetic: true,
-              confrontational: false,
-              detailed: true,
-              concise: false,
-              creative: true,
-              logical: true
-            },
-            zepSessionId,
-            explicitMemoryNotes,
-            user,
-            'Voz'
-          );
-
-          if (aiResponseText) {
-            setVoiceState(VoiceModeState.Speaking);
-            await elevenLabsService.streamTextToSpeech(aiResponseText);
-            setVoiceState(VoiceModeState.Idle);
-          } else {
-            setError('LéNOR no generó una respuesta de texto.');
-            setVoiceState(VoiceModeState.Error);
-          }
-          
-        } catch (aiError) {
-          console.error('Error en la respuesta de IA (VoiceMode):', aiError);
-          setError('LéNOR no pudo procesar tu voz en este momento.');
-          setVoiceState(VoiceModeState.Error);
-        }
-      } else {
-        setVoiceState(VoiceModeState.Idle); // No había nada que procesar
-      }
+      await sendMessage(currentTranscript, null, 'Voz');
     } catch (e) {
       console.error('Error en stopListeningAndProcess', e);
       setError('Error al detener la escucha');
@@ -219,20 +201,12 @@ const VoiceModeScreen: React.FC = () => {
 
   const exitVoiceMode = async () => {
     try {
-      // Detener cualquier escucha activa ANTES de destruir
-      // Comprobar el estado interno o si Voice tiene un método isListening()
-      // Por ahora, asumimos que si voiceState es Listening, debemos parar.
       if (voiceState === VoiceModeState.Listening) {
-        console.log(">>> VoiceModeScreen.exitVoiceMode: Voice state is Listening, attempting Voice.stop()");
         await Voice.stop(); 
-        console.log(">>> VoiceModeScreen.exitVoiceMode: Voice.stop() completed.");
       }
-      console.log(">>> VoiceModeScreen.exitVoiceMode: Attempting Voice.destroy()");
       await Voice.destroy();
-      console.log(">>> VoiceModeScreen.exitVoiceMode: Voice.destroy() completed.");
-      await elevenLabsService.stopPlayback(); // Usar el método de la instancia del servicio
+      await elevenLabsService.stopPlayback();
 
-      // Navegar DESPUÉS de la limpieza
       if (navigation.canGoBack()) {
         navigation.goBack();
       } else {
@@ -240,7 +214,6 @@ const VoiceModeScreen: React.FC = () => {
       }
     } catch (e) {
       console.error("Error al salir del modo voz:", e);
-      // Incluso si hay error en la limpieza, intentar navegar para no bloquear al usuario
       if (navigation.canGoBack()) {
         navigation.goBack();
       } else {
@@ -249,81 +222,75 @@ const VoiceModeScreen: React.FC = () => {
     }
   };
 
-  // Determine tint color by state
   const getTintColor = () => {
     switch (voiceState) {
-      case VoiceModeState.Listening:   return '#4CAF50';   // green
-      case VoiceModeState.Processing:  return '#FFC107';   // yellow
-      case VoiceModeState.Speaking:    return '#2196F3';   // blue
+      case VoiceModeState.Listening:   return '#4CAF50';
+      case VoiceModeState.Processing:  return '#FFC107';
+      case VoiceModeState.Speaking:    return '#2196F3';
       default:                          return theme.colors.text.secondary;
     }
   };
 
-  // Determine label by state
   const getLabel = () => {
     switch (voiceState) {
       case VoiceModeState.Listening:  return 'Escuchando... Pulsa para enviar';
-      case VoiceModeState.Processing: return 'LéNOR Procesando...';
-      case VoiceModeState.Speaking:   return 'LéNOR Hablando...';
+      case VoiceModeState.Processing: return 'LéNOR está pensando...';
+      case VoiceModeState.GeneratingAudio: return 'Generando audio...';
+      case VoiceModeState.Speaking:   return 'LéNOR está hablando...';
       default:                         return 'Toca el ícono para hablar';
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+   return (
+    <SafeAreaView style={componentStyles.safeArea} edges={['top']}>
       <Header title="LéNOR 1.5 - Voz" subtitle="Habla con LéNOR" />
-      <View style={styles.mainContent}> 
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      <View style={componentStyles.mainContent}> 
+      {error && <Text style={componentStyles.errorText}>{error}</Text>}
 
-      <View style={styles.micContainer}> 
+      <View style={componentStyles.micContainer}> 
         <TouchableOpacity
-          style={styles.pulsatingMicButton} 
+          style={componentStyles.pulsatingMicButton} 
           onPress={voiceState === VoiceModeState.Listening ? stopListeningAndProcess : startListening}
-            disabled={voiceState === VoiceModeState.Processing || voiceState === VoiceModeState.Speaking || isAuthLoading}
+            disabled={voiceState === VoiceModeState.Processing || voiceState === VoiceModeState.Speaking || isAuthLoading || !lenorIcon}
         >
-          <Animated.Image
-            source={iconLeNOR}
+          {lenorIcon && <Animated.Image
+            source={lenorIcon}
             style={[
-              styles.micIcon, 
+              componentStyles.micIcon, 
               { transform: [{ scale: pulseAnim }], tintColor: getTintColor() }
             ]}
-          />
+          />}
         </TouchableOpacity>
-        <Text style={styles.micText}>{getLabel()}</Text>
+        <Text style={componentStyles.micText}>{getLabel()}</Text>
         </View>
-      </View>
-
-      <TouchableOpacity style={styles.exitButton} onPress={exitVoiceMode}>
-        <Animated.View style={styles.exitContent}>
-          <Ionicons name="exit-outline" size={20} style={styles.exitIcon} />
-          <Text style={styles.exitText}>Salir de Modo Voz</Text>
+     
+      <TouchableOpacity style={componentStyles.exitButton} onPress={exitVoiceMode}>
+        <Animated.View style={componentStyles.exitContent}>
+          <Ionicons name="exit-outline" size={20} style={componentStyles.exitIcon} />
+          <Text style={componentStyles.exitText}>Salir de Modo Voz</Text>
         </Animated.View>
       </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  errorText: { ...theme.typography.styles.caption, color: theme.colors.status.error, marginBottom: theme.spacing.sm, paddingHorizontal: theme.spacing.md, textAlign: 'center' },
-  exitButton: { alignItems: 'center', backgroundColor: theme.colors.ui.button.secondary, borderRadius: 25, flexDirection: 'row', justifyContent: 'center', margin: theme.spacing.md, padding: theme.spacing.sm },
-  exitContent: { alignItems: 'center', flexDirection: 'row' },
-  exitIcon: { color: theme.colors.text.primary, marginRight: theme.spacing.sm },
-  exitText: { ...theme.typography.styles.body1, color: theme.colors.text.primary },
+const styles = (theme: Theme) => StyleSheet.create({
+  safeArea: {
+    backgroundColor: theme.colors.background.primary,
+    flex: 1,
+  },
   mainContent: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: theme.spacing.md,    
   },
+  errorText: { ...theme.typography.styles.caption, color: theme.colors.status.error, marginBottom: theme.spacing.sm, paddingHorizontal: theme.spacing.md, textAlign: 'center' },
   micContainer: { 
     alignItems: 'center', 
     marginBottom: theme.spacing.lg 
   },
-  micIcon: { 
-    height: 80, 
-    width: 80, 
-  },
-  micText: { ...theme.typography.styles.body1, color: theme.colors.text.secondary, marginTop: theme.spacing.sm },
   pulsatingMicButton: { 
     alignItems: 'center',
     backgroundColor: theme.colors.background.secondary,
@@ -337,10 +304,15 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     width: 150, 
   },
-  safeArea: {
-    backgroundColor: theme.colors.background.primary,
-    flex: 1,
-  }
+  micIcon: { 
+    height: 80, 
+    width: 80, 
+  },
+  micText: { ...theme.typography.styles.body1, color: theme.colors.text.secondary, marginTop: theme.spacing.sm },
+  exitButton: { alignItems: 'center', backgroundColor: theme.colors.ui.button.secondary, borderRadius: 25, flexDirection: 'row', justifyContent: 'center', margin: theme.spacing.md, padding: theme.spacing.sm },
+  exitContent: { alignItems: 'center', flexDirection: 'row' },
+  exitIcon: { color: theme.colors.text.primary, marginRight: theme.spacing.sm },
+  exitText: { ...theme.typography.styles.body1, color: theme.colors.text.primary },
 });
 
 export default VoiceModeScreen;

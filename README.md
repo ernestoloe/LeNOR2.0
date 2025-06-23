@@ -19,6 +19,31 @@ LéNOR es una aplicación móvil desarrollada con React Native y Expo que propor
 - **Síntesis de Voz**: ElevenLabs
 - **Compilación**: EAS Build (compatible con iOS sin Mac)
 
+## Arquitectura y Dependencias Clave
+
+Para entender el funcionamiento interno de LéNOR, aquí se desglosa la estructura del proyecto y el rol de cada dependencia fundamental.
+
+### Estructura de Módulos (`src/`)
+
+-   `components`: Contiene componentes de UI reutilizables (Botones, Cards, Inputs) que forman los bloques de construcción de las pantallas.
+-   `contexts`: El corazón de la gestión de estado de la app. `AuthContext.tsx` es el más importante, ya que maneja la sesión del usuario, sus preferencias, los mensajes y la lógica de negocio principal. `ThemeContext.tsx` gestiona los estilos y colores.
+-   `navigation`: Define la estructura de navegación de la aplicación (el Tab Navigator y las pantallas principales) usando `React Navigation`.
+-   `screens`: Cada archivo corresponde a una pantalla principal de la aplicación (Chat, Ajustes, Perfil, etc.).
+-   `services`: Módulos que encapsulan la comunicación con APIs externas y la lógica de bajo nivel. Por ejemplo, `authService.ts` gestiona el login/logout con Supabase, y `aiService.ts` se comunica con el modelo de lenguaje.
+-   `theme`: Define la paleta de colores, la tipografía y las unidades de espaciado que se usan en toda la aplicación para mantener una consistencia visual.
+-   `types`: Contiene las definiciones de tipos de TypeScript para los objetos principales de la app, como `User` y `Message`, asegurando la integridad del código.
+-   `utils`: Funciones de utilidad reutilizables que no encajan en otra categoría, como generadores de IDs o formateadores de texto.
+
+### Dependencias Principales
+
+-   **`expo`**: El framework sobre el que se construye todo. Provee un conjunto de herramientas y APIs que simplifican el desarrollo de aplicaciones nativas.
+-   **`@supabase/supabase-js`**: El cliente oficial de Supabase. Se utiliza para todas las interacciones con el backend: autenticación de usuarios, gestión de sesiones y operaciones con la base de datos (guardar/leer preferencias).
+-   **`@react-navigation/...`**: La solución completa para la navegación entre pantallas. Permite crear flujos complejos de manera declarativa.
+-   **`@react-native-async-storage/async-storage`**: Un sistema de almacenamiento local clave-valor. Se usa para persistir la sesión de Supabase de forma segura y rápida en el dispositivo.
+-   **`@react-native-voice/voice`**: La librería que se integra con los servicios nativos de iOS y Android para el reconocimiento de voz (Speech-to-Text) en el Modo Voz.
+-   **`expo-av`**: API de Expo para reproducir audio. Es fundamental para que el usuario pueda escuchar las respuestas generadas por ElevenLabs.
+-   **`react-native-markdown-display`**: Renderiza las respuestas del asistente, que vienen en formato Markdown, a componentes nativos de React Native, permitiendo mostrar texto con formato (negritas, listas, etc.).
+
 ## Requisitos Previos
 
 - Node.js (v16 o superior)

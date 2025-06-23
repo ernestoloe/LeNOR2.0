@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, Alert, ActivityIndicator, Switch, Linking, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Alert, ActivityIndicator, Switch, Linking, TouchableOpacity, Modal } from 'react-native';
 import { Container, Header, Card, Button } from '../components';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isVoiceMode, toggleVoiceMode } from '../services/settingsService';
 import Constants from 'expo-constants';
 import { getSystemStatusObject } from '../services/cortexService';
+import { Theme } from '../theme';
 
 interface SystemStatus {
   network: string;
@@ -18,14 +19,23 @@ interface SystemStatus {
 
 const SettingsScreen = () => {
   const theme = useTheme();
-  const { user, signOut, isLoading, userPreferences, explicitMemoryNotes, zepSessionId, deleteMemoryNote } = useAuth();
+  const { user, signOut, isLoading, userPreferences, explicitMemoryNotes, zepSessionId, deleteMemoryNote, updatePreferences } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [voiceModeEnabled, setVoiceModeEnabled] = useState(false);
   const [storageSize, setStorageSize] = useState('Calculando...');
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
   const appVersion = Constants.expoConfig?.version || 'N/A';
   const styles = createStyles(theme);
+
+  const availableLanguages = [
+    { label: 'Español (MX)', value: 'es-MX' },
+    { label: 'English (US)', value: 'en-US' },
+    { label: 'Português (BR)', value: 'pt-BR' },
+  ];
+
+  const currentLanguageLabel = availableLanguages.find(lang => lang.value === userPreferences?.voice_locale)?.label || 'Seleccionar';
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -68,6 +78,20 @@ const SettingsScreen = () => {
 
     loadInitialData();
   }, [zepSessionId]);
+
+  const handleLanguageChange = async (newLocale: string) => {
+    if (userPreferences) {
+      try {
+        const newPrefs = { ...userPreferences, voice_locale: newLocale };
+        await updatePreferences(newPrefs);
+      } catch (error) {
+        console.error('Error actualizando el idioma:', error);
+        Alert.alert('Error', 'No se pudo guardar la preferencia de idioma.');
+      } finally {
+        setLanguageModalVisible(false);
+      }
+    }
+  };
 
   const handleVoiceModeToggle = async () => {
     try {
@@ -146,7 +170,6 @@ const SettingsScreen = () => {
           onPress: async () => {
             try {
               await deleteMemoryNote(noteToDelete);
-              // Opcional: Mostrar confirmación o dejar que la UI se actualice por el AuthContext
             } catch (error) {
               console.error('Error eliminando nota desde SettingsScreen:', error);
               Alert.alert("Error", "No se pudo eliminar la nota.");
@@ -157,7 +180,6 @@ const SettingsScreen = () => {
     );
   };
 
-  // Convertir el string de notas en un array para mostrar
   const memoryNotesArray = explicitMemoryNotes
     ? explicitMemoryNotes.split('\n').map(note => note.startsWith('- ') ? note.substring(2) : note).filter(Boolean)
     : [];
@@ -190,7 +212,7 @@ const SettingsScreen = () => {
               </View>
               <View style={styles.specRow}>
                 <Ionicons name="library-outline" size={16} color={theme.colors.accent.primary} style={styles.specIcon} />
-                <Text style={styles.specText}><Text style={styles.specLabel}>Dataset:</Text> Dual Propietario (ELOE, inc. y Hugging Face Repository)</Text>
+                <Text style={styles.specText}><Text style={styles.specLabel}>Dataset:</Text> Propietario (ELOE, inc.)</Text>
               </View>
               <View style={styles.specRow}>
                 <Ionicons name="volume-medium-outline" size={16} color={theme.colors.accent.primary} style={styles.specIcon} />
@@ -248,278 +270,230 @@ const SettingsScreen = () => {
             </>
           )}
         </Card>
-        
-        <Card title="Preferencias" style={styles.card}>
-          <View style={styles.preferenceItem}>
-            <Text style={styles.preferenceLabel}>Modo voz:</Text>
-            <Switch 
-              value={voiceModeEnabled}
-              onValueChange={handleVoiceModeToggle}
-              trackColor={{ false: theme.colors.ui.button.secondary, true: theme.colors.accent.primary }}
+
+        <Card title="Ajustes de la App" style={styles.card} loading={isLoading}>
+          <View style={styles.settingItem}>
+            <Text style={styles.settingLabel}>Modo Voz por Defecto</Text>
+            <Switch
+              trackColor={{ false: theme.colors.background.tertiary, true: theme.colors.accent.primary }}
               thumbColor={theme.colors.background.primary}
+              onValueChange={handleVoiceModeToggle}
+              value={voiceModeEnabled}
             />
           </View>
-          
-          <View style={styles.preferenceItem}>
-            <Text style={styles.preferenceLabel}>Preferencias activas:</Text>
-            <View style={styles.tagsContainer}>
-              {userPreferences?.empathetic && <View style={styles.tag}><Text style={styles.tagText}>Empático</Text></View>}
-              {userPreferences?.confrontational && <View style={styles.tag}><Text style={styles.tagText}>Confrontativo</Text></View>}
-              {userPreferences?.detailed && <View style={styles.tag}><Text style={styles.tagText}>Detallado</Text></View>}
-              {userPreferences?.concise && <View style={styles.tag}><Text style={styles.tagText}>Conciso</Text></View>}
-              {userPreferences?.creative && <View style={styles.tag}><Text style={styles.tagText}>Creativo</Text></View>}
-              {userPreferences?.logical && <View style={styles.tag}><Text style={styles.tagText}>Lógico</Text></View>}
-              {!userPreferences?.empathetic && !userPreferences?.confrontational && !userPreferences?.detailed && !userPreferences?.concise && !userPreferences?.creative && !userPreferences?.logical &&
-                <View style={[styles.tag, styles.noPrefsTag]}><Text style={styles.tagText}>Sin preferencias activas</Text></View>
-              }
-            </View>
-          </View>
-        </Card>
-        
-        <Card title="Almacenamiento" style={styles.card}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Espacio utilizado:</Text>
-            <Text style={styles.infoValue}>{storageSize}</Text>
-          </View>
-          
-          <Button
-            title="Limpiar caché"
-            onPress={handleClearCache}
-            variant="secondary"
-            size="medium"
-            icon={<Ionicons name="trash-outline" size={18} color={theme.colors.text.primary} />}
-            style={styles.button}
-          />
-        </Card>
-        
-        <Card title="Ajustes de la Aplicación" style={styles.card}>
           <View style={styles.settingItem}>
-            <Text style={styles.infoLabel}>Versión de la App:</Text>
-            <Text style={styles.infoValue}>{appVersion}</Text>
+            <Text style={styles.settingLabel}>Idioma de Voz</Text>
+            <TouchableOpacity style={styles.languageSelector} onPress={() => setLanguageModalVisible(true)}>
+              <Text style={styles.languageSelectorText}>{currentLanguageLabel}</Text>
+              <Ionicons name="chevron-down" size={18} color={theme.colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.settingItem}>
+            <Text style={styles.settingLabel}>Limpiar Caché Local</Text>
+            <Button
+              title={storageSize}
+              onPress={handleClearCache}
+              variant="secondary"
+            />
           </View>
         </Card>
+
+        <Button
+          title={isSigningOut ? "Cerrando Sesión..." : "Cerrar Sesión"}
+          onPress={handleLogout}
+          variant="secondary"
+          style={styles.logoutButton}
+          disabled={isSigningOut}
+        />
         
-        <Card style={styles.card}>
-          <Button
-            title={isSigningOut ? "Cerrando sesión..." : "Cerrar Sesión"}
-            onPress={handleLogout}
-            variant="secondary"
-            size="large"
-            fullWidth
-            icon={<Ionicons name="log-out-outline" size={20} color={theme.colors.text.primary} />}
-            disabled={isLoading || isSigningOut}
-          />
-          
-          {isSigningOut && (
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color={theme.colors.accent.primary} />
-              <Text style={styles.loadingText}>Cerrando sesión...</Text>
-            </View>
-          )}
-        </Card>
+        <Text style={styles.versionText}>Versión de la App: {appVersion}</Text>
         
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>LéNOR 2.0 by ELOE,inc. © 2025</Text>
-        </View>
       </ScrollView>
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={languageModalVisible}
+        onRequestClose={() => {
+          setLanguageModalVisible(false);
+        }}
+      >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPressOut={() => setLanguageModalVisible(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Seleccionar Idioma de Voz</Text>
+            {availableLanguages.map((lang) => (
+              <TouchableOpacity
+                key={lang.value}
+                style={styles.modalOption}
+                onPress={() => handleLanguageChange(lang.value)}
+              >
+                <Text style={styles.modalOptionText}>{lang.label}</Text>
+                {userPreferences?.voice_locale === lang.value && (
+                  <Ionicons name="checkmark-circle" size={22} color={theme.colors.status.success} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Container>
   );
 };
 
-const createStyles = (theme) => StyleSheet.create({
-  button: {
-    marginTop: 20,
+const createStyles = (theme: Theme) => StyleSheet.create({
+  scrollContent: {
+    padding: theme.spacing.md,
   },
   card: {
-    backgroundColor: theme.colors.background.secondary,
-    borderColor: theme.colors.ui.divider,
-    marginBottom: 16,
-  },
-  clearLogsButton: {
-    marginTop: 10,
-    backgroundColor: theme.colors.accent.tertiary,
-  },
-  clearLogsButtonText: {
-    color: theme.colors.text.primary,
-    fontSize: 16,
-  },
-  debugHeaderContainer: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  debugLogEntry: {
-    color: theme.colors.text.secondary,
-    fontFamily: 'monospace',
-    fontSize: 12,
-    marginBottom: 5,
-  },
-  debugValue: {
-    fontSize: 14,
-    fontFamily: 'monospace',
-    color: theme.colors.accent.primary,
-    flexWrap: 'wrap',
-  },
-  debugValueSmall: {
-    ...theme.typography.styles.caption,
-    backgroundColor: theme.colors.background.secondary,
-    borderRadius: 8,
-    color: theme.colors.text.secondary,
-    fontFamily: 'monospace',
-    marginTop: 5,
-    padding: 10,
-  },
-  deleteNoteButton: {
-    padding: 5,
-    marginLeft: 10,
-  },
-  footer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  footerText: {
-    ...theme.typography.styles.caption,
-    color: theme.colors.text.tertiary,
-    marginBottom: 5,
-  },
-  inDevelopment: {
-    color: theme.colors.text.disabled,
+    marginBottom: theme.spacing.md,
   },
   infoItem: {
-    marginBottom: 20,
+    marginBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.ui.divider,
-    paddingBottom: 15,
+    borderBottomColor: theme.colors.background.secondary,
   },
   infoLabel: {
     fontSize: 16,
-    fontFamily: theme.typography.fontFamily.primary,
     color: theme.colors.text.secondary,
-    marginBottom: 8,
+    marginBottom: theme.spacing.xs,
   },
   infoValue: {
     fontSize: 16,
-    fontFamily: theme.typography.fontFamily.primary,
     color: theme.colors.text.primary,
   },
-  linkItem: {
-    alignItems: 'center',
+  debugValue: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    fontFamily: 'monospace',
+    backgroundColor: theme.colors.background.secondary,
+    padding: theme.spacing.sm,
+    borderRadius: 4,
+  },
+  techTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.md,
+  },
+  specsContainer: {
+    paddingLeft: theme.spacing.md,
+  },
+  specRow: {
     flexDirection: 'row',
-    marginTop: 15,
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
   },
-  linkText: {
-    color: theme.colors.accent.primary,
-    fontSize: 16,
-    fontFamily: theme.typography.fontFamily.primary,
-    marginLeft: 10,
+  specIcon: {
+    marginRight: theme.spacing.md,
   },
-  loader: {
-    marginTop: 10,
+  specText: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    flex: 1,
   },
-  logsScrollView: {
-    backgroundColor: theme.colors.background.tertiary,
-    borderRadius: 8,
-    maxHeight: 200,
-    padding: 10,
+  specLabel: {
+    fontWeight: '600',
+  },
+  inDevelopment: {
+    color: theme.colors.text.secondary,
+    fontStyle: 'italic',
   },
   memoryNotesContainer: {
-    marginTop: 5,
+    marginTop: theme.spacing.sm,
   },
   memoryNoteItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.ui.divider,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.background.secondary,
+    borderRadius: 8,
+    marginBottom: theme.spacing.xs,
   },
   memoryNoteText: {
     flex: 1,
     color: theme.colors.text.primary,
-    fontFamily: theme.typography.fontFamily.primary,
     fontSize: 14,
   },
-  noPrefsTag: {
-    backgroundColor: theme.colors.ui.divider,
-  },
-  preferenceItem: {
-    marginBottom: 10,
-  },
-  preferenceLabel: {
-    fontSize: 16,
-    fontFamily: theme.typography.fontFamily.primary,
-    color: theme.colors.text.secondary,
-    marginBottom: 5,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  specIcon: {
-    marginRight: 10,
-  },
-  specLabel: {
-    fontFamily: theme.typography.fontFamily.primary,
-    color: theme.colors.text.secondary,
-  },
-  specRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  specText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: theme.typography.fontFamily.primary,
-    color: theme.colors.text.primary,
-  },
-  specsContainer: {
-    paddingLeft: 10,
-  },
-  tag: {
-    backgroundColor: theme.colors.accent.tertiary,
-    borderRadius: 8,
-    marginBottom: 5,
-    marginRight: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  tagText: {
-    color: theme.colors.text.primary,
-    fontSize: 12,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 5,
-  },
-  techTitle: {
-    fontSize: 20,
-    fontFamily: theme.typography.fontFamily.primary,
-    color: theme.colors.text.primary,
-    marginBottom: 12,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.ui.divider,
-    paddingTop: 15,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  loadingText: {
-    color: theme.colors.text.primary,
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 20,
+  deleteNoteButton: {
+    marginLeft: theme.spacing.md,
+    padding: theme.spacing.xs,
   },
   settingItem: {
-    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.tertiary,
+  },
+  settingLabel: {
+    fontSize: 16,
+    color: theme.colors.text.primary,
+  },
+  languageSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.background.secondary,
+    borderRadius: 8,
+  },
+  languageSelectorText: {
+    fontSize: 16,
+    color: theme.colors.text.secondary,
+    marginRight: theme.spacing.xs,
+  },
+  logoutButton: {
+    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.status.error,
+  },
+  versionText: {
+    textAlign: 'center',
+    color: theme.colors.text.secondary,
+    fontSize: 12,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalContent: {
+    width: '85%',
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: 12,
+    padding: theme.spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.lg,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.background.tertiary,
+  },
+  modalOptionText: {
+    fontSize: 18,
+    color: theme.colors.text.primary,
   },
 });
 

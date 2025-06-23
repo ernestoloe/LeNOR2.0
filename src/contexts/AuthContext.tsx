@@ -8,29 +8,28 @@ import React, {
   ReactNode,
 } from 'react';
 import { Alert } from 'react-native';
-import { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { AuthChangeEvent, Session, Subscription } from '@supabase/supabase-js';
 import { generateMessageId } from '../utils/id';
-import {
-  User,
-  UserPreferences,
-  getCurrentUser,
-  getUserPreferencesAndNotes,
-  signIn,
-  signOut,
-  signUp,
-  updateUserPreferences,
-  addExplicitMemoryNote,
-  deleteExplicitMemoryNote,
-  uploadImage,
-  supabase,
-} from '../services/supabase';
+
+// --- Importaciones de Servicios Refactorizados ---
+import { supabase } from '../services/supabaseClient';
+import { User, UserPreferences } from '../types/user';
 import { 
-    loadMessages, 
-    ChatMsg
-} from '../hooks/useMessageMemory';
+    signIn, 
+    signUp, 
+    signOut, 
+    getCurrentUser 
+} from '../services/authService';
+import { 
+    getUserPreferencesAndNotes, 
+    updateUserPreferences,
+    addExplicitMemoryNote,
+    deleteExplicitMemoryNote,
+    uploadImage,
+} from '../services/userProfileService';
+
 import { addMessageToSession } from '../services/zepService';
 import { Message } from '../types/chat';
-import { logError } from '../services/loggingService';
 import { messageStore } from '../services/messageStore';
 import { 
   startNewConversation, 
@@ -46,7 +45,8 @@ const DEFAULT_USER_PREFERENCES: UserPreferences = {
   detailed: true,
   concise: false,
   creative: true,
-  logical: true
+  logical: true,
+  voice_locale: 'es-MX',
 };
 
 interface AuthContextType {
@@ -68,12 +68,12 @@ interface AuthContextType {
   addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => Promise<void>;
   startNewChat: () => Promise<void>;
   loadMoreMessages: () => Promise<boolean>;
-  sendMessage: (messageText: string, localImageUri?: string | null) => Promise<boolean>;
+  sendMessage: (messageText: string, localImageUri?: string | null, inputMode?: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [explicitMemoryNotes, setExplicitMemoryNotes] = useState<string | null>(null);
@@ -83,88 +83,110 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUserLoading, setIsUserLoading] = useState<boolean>(false);
+  const [authSubscription, setAuthSubscription] = useState<Subscription | null>(null);
 
   useEffect(() => {
-      setIsLoading(true);
-    // Listener para cambios de estado de autenticación de Supabase
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
-        console.log(
-          '>>> AuthContext: onAuthStateChange event:',
-          _event,
-          'session:',
-          session ? 'exists' : 'null'
-        );
-        setIsUserLoading(true);
-        try {
-          if (session && session.user) {
-            const currentUserData: User = {
-              id: session.user.id,
-              email: session.user.email || ''
-            };
-            setUser(currentUserData);
-            setUserId(session.user.id);
-            messageStore.setCurrentUser(session.user.id);
-
-            const prefsAndNotes = await getUserPreferencesAndNotes(session.user.id);
-          if (prefsAndNotes) {
-              const { preferences, explicit_memory_notes, zep_session_id } = prefsAndNotes;
-              setUserPreferences(preferences);
-            setExplicitMemoryNotes(explicit_memory_notes || '');
-              setZepSessionId(zep_session_id || session.user.id); 
-          } else {
-              const defaultPrefsForContext: UserPreferences = {
-                  empathetic: false, confrontational: false, detailed: false, concise: false,
-                  creative: false, logical: false, nicknameForLenor: '', workScheduleNotes: '',
-                  hobbiesNotes: '', relationshipsNotes: ''
-              };
-              setUserPreferences(defaultPrefsForContext);
-            setExplicitMemoryNotes('');
-              setZepSessionId(session.user.id);
-              console.warn(`>>> AuthContext (onAuthStateChange): getUserPreferencesAndNotes devolvió null. Usando defaults.`);
-          }
-
-            let convId = await getCurrentConversation(session.user.id);
-          if (!convId) {
-              console.log(">>> AuthContext (onAuthStateChange): No se encontró conversación actual, iniciando una nueva.");
-              convId = await startNewConversation(session.user.id);
-          }
-          setCurrentConversationId(convId);
-          messageStore.setCurrentConversation(convId);
-        } else {
-            setUser(null);
-            setUserId('');
-            setUserPreferences(null);
-            setExplicitMemoryNotes(null);
-            setZepSessionId(null);
-            setCurrentConversationId(null);
-            messageStore.clearMessages();
-            messageStore.setCurrentUser('');
-          }
-        } catch (error) {
-          console.error('>>> AuthContext: Error en onAuthStateChange manejando sesión:', error);
-          setUser(null);
-          setUserId('');
-          setUserPreferences(null);
-          setExplicitMemoryNotes(null);
-          setZepSessionId(null);
-          setCurrentConversationId(null);
-          messageStore.clearMessages();
-          messageStore.setCurrentUser('');
-        } finally {
-          setIsUserLoading(false);
-          setIsLoading(false);
-        }
+    const initializeAuth = async () => {
+      // Proactivamente obtener la sesión actual al inicio
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error("Error en getSession inicial:", error);
+        setIsUserLoading(false);
+        setIsLoading(false);
+        return;
       }
-    );
+
+      if (session) {
+        await processUserSession(session);
+      } else {
+        clearUserData();
+      }
+      setIsUserLoading(false);
+      setIsLoading(false);
+      
+      // Configurar el listener para futuros cambios
+      const { data: authListener } = supabase.auth.onAuthStateChange(
+        async (_event, session) => {
+          setIsUserLoading(true);
+          if (session) {
+            await processUserSession(session);
+          } else {
+            clearUserData();
+          }
+          setIsUserLoading(false);
+        }
+      );
+
+      // Guardar la suscripción para limpiarla al desmontar
+      setAuthSubscription(authListener.subscription);
+    };
+
+    initializeAuth();
 
     return () => {
-      if (authListener && authListener.subscription) {
-        console.log('>>> AuthContext: Limpiando authListener de Supabase');
-        authListener.subscription.unsubscribe();
+      if (authSubscription) {
+        authSubscription.unsubscribe();
       }
     };
-  }, []);
+  }, []); // Dependencia vacía para que solo se ejecute al montar.
+
+  const processUserSession = async (session: Session) => {
+    try {
+      setIsUserLoading(true);
+      
+      const currentUserData: User = {
+        id: session.user.id,
+        email: session.user.email || ''
+      };
+      
+      setUser(currentUserData);
+      setUserId(session.user.id);
+      messageStore.setCurrentUser(session.user.id);
+
+      // Cargar preferencias
+      const prefsAndNotes = await getUserPreferencesAndNotes(session.user.id);
+      if (prefsAndNotes) {
+        setUserPreferences(prefsAndNotes.preferences);
+        setExplicitMemoryNotes(prefsAndNotes.explicit_memory_notes || '');
+        setZepSessionId(prefsAndNotes.zep_session_id || session.user.id);
+      } else {
+        // Defaults
+        setUserPreferences({
+          empathetic: false, confrontational: false, detailed: false, concise: false,
+          creative: false, logical: false, nicknameForLenor: '', workScheduleNotes: '',
+          hobbiesNotes: '', relationshipsNotes: '', voice_locale: 'es-MX'
+        });
+        setExplicitMemoryNotes('');
+        setZepSessionId(session.user.id);
+      }
+
+      // Configurar conversación
+      let convId = await getCurrentConversation(session.user.id);
+      if (!convId) {
+        convId = await startNewConversation(session.user.id);
+      }
+      setCurrentConversationId(convId);
+      messageStore.setCurrentConversation(convId);
+      
+    } catch (error) {
+      console.error('Error procesando sesión de usuario:', error);
+      clearUserData();
+    } finally {
+      setIsUserLoading(false);
+    }
+  };
+
+  const clearUserData = () => {
+    setUser(null);
+    setUserId('');
+    setUserPreferences(null);
+    setExplicitMemoryNotes(null);
+    setZepSessionId(null);
+    setCurrentConversationId(null);
+    messageStore.clearMessages();
+    messageStore.setCurrentUser('');
+  };
 
   useEffect(() => {
     console.log('>>> AuthContext: Configurando suscripción a messageStore');
@@ -233,7 +255,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const defaultPrefs: UserPreferences = {
             empathetic: false, confrontational: false, detailed: false, concise: false,
             creative: false, logical: false, nicknameForLenor: '', workScheduleNotes: '',
-            hobbiesNotes: '', relationshipsNotes: ''
+            hobbiesNotes: '', relationshipsNotes: '', voice_locale: 'es-MX'
           };
           setUserPreferences(defaultPrefs);
           setExplicitMemoryNotes('');
@@ -254,33 +276,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         await messageStore.loadMessagesFromStorage();
 
-        // Cargar mensajes desde Supabase como respaldo (lógica existente)
-        try {
-          const history = await loadMessages(currentUserId, 50);
-          if (history.length > 0 && messageStore.getMessages().length === 0) {
-            console.log(`>>> AuthContext (SignIn): Cargando ${history.length} mensajes adicionales desde Supabase.`);
-            const formattedHistory: Message[] = history.map((msg: ChatMsg) => {
-              // ChatMsg solo tiene 'role' y 'content'. 
-              // ID y Timestamp deben generarse o tomarse del momento actual.
-              const messageId = generateMessageId(currentUserId);
-              const messageTimestamp = new Date().toISOString();
-
-              return {
-                id: messageId,
-                text: msg.content,
-                isUser: msg.role === 'user',
-                timestamp: new Date(messageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || 'No time', 
-              };
-            });
-            
-            // Solo establecer si no hay mensajes ya cargados desde el storage local
-            if (messageStore.getMessages().length === 0) {
-              messageStore.setMessages(formattedHistory);
-            }
-          }
-        } catch (supabaseError) {
-          console.error('Error cargando mensajes desde Supabase durante sign-in:', supabaseError);
+        // Se elimina la carga de historial aquí; messageStore se encarga de ello.
+        /*
+        const history = await loadMessages(currentUserId, 50);
+        if (history) {
+          const formattedHistory: Message[] = history.map((msg: ChatMsg) => {
+            return {
+              id: msg.uuid,
+              text: msg.content,
+              isUser: msg.role === 'human',
+              timestamp: new Date(msg.createdAt).toLocaleTimeString(),
+            };
+          });
+          messageStore.setMessages(formattedHistory.reverse());
         }
+        */
         // Si todo fue exitoso, isLoading se manejará en el bloque finally.
 
       } else {
@@ -387,7 +397,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         Alert.alert("Error", "No se pudo guardar la nota en la memoria explícita.");
       }
     } catch (error) {
-      logError(error, "AuthContext_handleAddMemoryNote");
+      console.error("Error en AuthContext_handleAddMemoryNote:", error);
       Alert.alert("Error", "Ocurrió un error al guardar la nota.");
     } finally {
       setIsLoading(false);
@@ -410,7 +420,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         Alert.alert("Error", "No se pudo eliminar la nota de la memoria explícita.");
       }
     } catch (error) {
-      logError(error, "AuthContext_handleDeleteMemoryNote");
+      console.error("Error en AuthContext_handleDeleteMemoryNote:", error);
       Alert.alert("Error", "Ocurrió un error al eliminar la nota.");
     } finally {
       setIsLoading(false);
@@ -420,7 +430,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const handleAddMessage = async (messageData: Omit<Message, 'id' | 'timestamp'>) => {
     if (!userId || !currentConversationId) {
       console.error('Error: No hay usuario o ID de conversación para añadir mensaje.');
-      logError(new Error('Attempted to add message without user or conversation ID'), 'handleAddMessageNoUserOrConv');
       return;
     }
 
@@ -455,7 +464,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error: unknown) { // Cambiado de any a unknown
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido al guardar mensaje en Zep/Supabase';
       console.error('>>> AuthContext: Error en handleAddMessage al guardar en Zep/DB:', errorMessage);
-      logError(error instanceof Error ? error : new Error(errorMessage), 'handleAddMessagePersistence');
       // Considerar si se debe revertir el mensaje del MessageStore o marcarlo como no enviado
     }
   };
@@ -476,7 +484,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       messageStore.setCurrentConversation(newConvId);
       console.log(`>>> AuthContext: Nueva conversación iniciada con ID: ${newConvId}`);
     } catch (error) {
-      logError(error, "handleStartNewChat_creation");
+      console.error("Error en handleStartNewChat_creation:", error);
       Alert.alert('Error', 'No se pudo iniciar una nueva conversación.');
     } finally {
       setIsLoading(false);
@@ -491,7 +499,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return await messageStore.loadNextPage();
     } catch (error) {
       console.error("Error al cargar más mensajes:", error);
-      logError(error, "handleLoadMoreMessages");
       return false;
     }
   };
@@ -499,10 +506,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   /**
    * Envía un mensaje al asistente IA y maneja la respuesta
    */
-  const sendMessage = async (messageText: string, localImageUri?: string | null): Promise<boolean> => {
+  const sendMessage = async (messageText: string, localImageUri?: string | null, inputMode?: string): Promise<boolean> => {
     setIsUserLoading(true); 
     let success = false;
-    let publicImageUrl: string | undefined = undefined;
+    let imageUrl: string | undefined = undefined;
     
     try {
       if (!userId || !zepSessionId) {
@@ -524,11 +531,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // 1. Subir imagen si se proporciona
       if (localImageUri) {
         try {
-          publicImageUrl = await uploadImage(localImageUri);
+          // Subir imagen a Supabase y obtener URL pública
+          imageUrl = await uploadImage(localImageUri);
+          Alert.alert('Debug: Image URL', imageUrl);
+          console.log('>>> AuthContext: Imagen subida. URL pública:', imageUrl);
         } catch (uploadError) {
           const errorMsg = `AuthContext.sendMessage: Error al subir la imagen: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`;
           console.error(errorMsg);
-          logError(uploadError, 'sendMessage_uploadImage');
           const uploadFailedMessage: Message = {
             id: generateMessageId(AI_ID),
             text: "Error al subir la imagen. Por favor, inténtalo de nuevo.",
@@ -549,7 +558,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         text: messageText,
         isUser: true,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        localImageUri: publicImageUrl,
+        localImageUri: imageUrl,
       };
       messageStore.addMessage(userMessage);
 
@@ -561,7 +570,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         timestamp: userMessage.timestamp,
         senderId: userId,
         role: 'user',
-        imageUrl: publicImageUrl,
+        imageUrl: imageUrl,
       };
 
       // 4. Llamar al servicio de IA SIN el JWT
@@ -571,7 +580,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         zepSessionId,
         explicitMemoryNotes,
         user,
-        'Texto'
+        inputMode
       );
       
       success = true;
@@ -590,7 +599,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         const errorMsgBase = 'Error enviando mensaje';
         console.error(`${errorMsgBase}: ${error instanceof Error ? error.message : String(error)}`);
-        logError(error, 'sendMessage_general');
         
         const errorResponseMessage: Message = {
           id: generateMessageId(AI_ID),

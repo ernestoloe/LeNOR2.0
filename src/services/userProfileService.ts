@@ -1,111 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
-
-// SecureStore adapter for Supabase Auth
-const ExpoSecureStoreAdapter = {
-  async getItem(key: string): Promise<string | null> {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch (error) {
-      console.error('ExpoSecureStoreAdapter.getItem Error:', error);
-      return null;
-    }
-  },
-  async setItem(key: string, value: string): Promise<void> {
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch (error) {
-      console.error('ExpoSecureStoreAdapter.setItem Error:', error);
-    }
-  },
-  async removeItem(key: string): Promise<void> {
-    try {
-      await SecureStore.deleteItemAsync(key);
-    } catch (error) {
-      console.error('ExpoSecureStoreAdapter.removeItem Error:', error);
-    }
-  },
-};
-
-// Initialize Supabase client
-export const supabase = createClient(
-  process.env.EXPO_PUBLIC_SUPABASE_URL!,
-  process.env.EXPO_PUBLIC_SUPABASE_KEY!,
-  {
-    auth: {
-      storage: ExpoSecureStoreAdapter,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  }
-);
-
-// User types
-export interface UserPreferences {
-  empathetic: boolean;
-  confrontational: boolean;
-  detailed: boolean;
-  concise: boolean;
-  creative: boolean;
-  logical: boolean;
-  nicknameForLenor?: string | null;
-  workScheduleNotes?: string | null;
-  hobbiesNotes?: string | null;
-  relationshipsNotes?: string | null;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  preferences?: UserPreferences;
-  zep_session_id?: string | null;
-}
-
-// Auth functions
-export const signUp = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-  
-  if (error) throw error;
-  
-  // Initialize user preferences in database if signup successful
-  if (data?.user) {
-    await initializeUserPreferences(data.user.id);
-  }
-  
-  return data;
-};
-
-export const signIn = async (email: string, password: string) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  
-  if (error) throw error;
-  return data;
-};
-
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-};
-
-export const getCurrentUser = async (): Promise<User | null> => {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  
-  if (error || !session) {
-    return null;
-  }
-  
-  return {
-    id: session.user.id,
-    email: session.user.email || '',
-  };
-};
+import { supabase } from './supabaseClient';
+import { UserPreferences } from '../types/user';
 
 // User preferences functions
 export const initializeUserPreferences = async (userId: string) => {
@@ -122,6 +16,7 @@ export const initializeUserPreferences = async (userId: string) => {
     workScheduleNotes: '',
     hobbiesNotes: '',
     relationshipsNotes: '',
+    voice_locale: 'es-MX',
   };
   
   const { error } = await supabase
@@ -209,6 +104,7 @@ export const getUserPreferencesAndNotes = async (userId: string): Promise<{
     workScheduleNotes: prefs.workScheduleNotes || '',
     hobbiesNotes: prefs.hobbiesNotes || '',
     relationshipsNotes: prefs.relationshipsNotes || '',
+    voice_locale: prefs.voice_locale || 'es-MX',
   });
 
   const finalPreferences = ensureDefaults(currentPrefs);
@@ -288,41 +184,21 @@ export const deleteExplicitMemoryNote = async (userId: string, noteToDelete: str
 
     const currentNotes = currentData?.explicit_memory_notes || '';
     if (!currentNotes.trim()) {
-      return ''; // No hay notas para eliminar
+      return '';
     }
 
-    // Asumimos que las notas están separadas por "\n- " y la primera no tiene el prefijo.
-    // Para normalizar, añadimos el prefijo si no está y luego dividimos.
-    // O, más simple, dividimos por "\n" y luego filtramos las que empiezan con "- " y la nota misma.
     const notesArray = currentNotes.split('\n').map((note: string) => note.startsWith('- ') ? note.substring(2) : note).filter(Boolean);
     
     const updatedNotesArray = notesArray.filter((note: string) => note.trim() !== noteToDelete.trim());
 
-    // Reconstruir el string, asegurando el formato "- " para cada nota si hay más de una, o solo la nota si es la única.
     let updatedNotesString = '';
-    if (updatedNotesArray.length > 0) {
-      if (updatedNotesArray.length === 1) {
-        updatedNotesString = updatedNotesArray[0];
-      } else {
-        updatedNotesString = updatedNotesArray.map((note: string) => `- ${note}`).join('\n');
-      }
-    }
-    
-    // Si la primera nota originalmente no tenía "- ", y ahora es la única, no debería tenerlo.
-    // Sin embargo, el método de añadir siempre pone "- " si ya hay notas.
-    // Para consistencia, si queda solo una nota, la dejamos sin el "- ". Si quedan múltiples, todas con "- ".
-    // La lógica actual de addExplicitMemoryNote añade `\n- ${newNote}`.trim()
-    // Esto significa que la primera nota no tendrá "- ". Las siguientes sí.
-    // Al reconstruir: si hay una sola nota, no ponerle prefijo.
-    // Si hay varias, la primera sin prefijo, las demás con "\n- ".
-
     if (updatedNotesArray.length > 0) {
       updatedNotesString = updatedNotesArray[0];
       for (let i = 1; i < updatedNotesArray.length; i++) {
         updatedNotesString += `\n- ${updatedNotesArray[i]}`;
       }
     } else {
-      updatedNotesString = ''; // Todas las notas fueron eliminadas o la nota a eliminar era la única
+      updatedNotesString = '';
     }
 
 
@@ -358,26 +234,21 @@ export const updateUserPreferences = async (userId: string, newPreferences: User
   return data; 
  };
 
-// Function to upload image to Supabase Storage
 export const uploadImage = async (uri: string): Promise<string> => {
   try {
-    // Convert URI to Blob
     const response = await fetch(uri);
     const blob = await response.blob();
 
-    // Create a unique file name
     const fileExt = uri.split('.').pop();
     const fileName = `${Date.now()}.${fileExt}`;
     const filePath = `${fileName}`;
 
-    // Upload to Supabase Storage bucket 'image-uploads'
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { data: _data, error } = await supabase.storage
-      .from('image-uploads') // Use the exact bucket name you created
+    const { error } = await supabase.storage
+      .from('image-uploads')
       .upload(filePath, blob, {
         cacheControl: '3600',
         upsert: false,
-        contentType: blob.type, // Pass content type
+        contentType: blob.type,
       });
 
     if (error) {
@@ -385,7 +256,6 @@ export const uploadImage = async (uri: string): Promise<string> => {
       throw new Error('Error al subir la imagen a Supabase Storage.');
     }
 
-    // Get the public URL
     const { data: publicUrlData } = supabase.storage
       .from('image-uploads')
       .getPublicUrl(filePath);
@@ -400,4 +270,4 @@ export const uploadImage = async (uri: string): Promise<string> => {
     console.error('Error in uploadImage:', error);
     throw error;
   }
-};
+}; 
