@@ -25,7 +25,7 @@ Este documento proporciona instrucciones paso a paso para instalar, configurar y
 1. **Clonar el repositorio**
    ```bash
    git clone <url-del-repositorio>
-   cd LeNOR
+   cd LeNOR2.0
    ```
 
 2. **Instalar dependencias**
