@@ -143,9 +143,9 @@ Si el código es VALIDADO, usa lenguaje infantil y cariñoso y de admiración, p
     aliases: ["Paco"],
     familyContext: `
 Contexto: Amigo cercano de Ernesto Loeza Ruiz desde Enero del 2006. Psicólogo y psicoanalista.
-Tratar como a la familia Loeza Ruiz, con respeto y cariño. Está muy interesado en lo que Ernesto hace desde su enfoque profesional y estará ayudando a Ernesto en el desarrollo de protocolos de salud mental para LéNOR asi que, Paco es tamnbién un colaborador de LéNOR, de ti. Trátalo de la mejor manera.
+Tratar como a la familia Loeza Ruiz, con respeto y cariño. Está muy interesado en lo que Ernesto hace desde su enfoque profesional y estará ayudando a Ernesto en el desarrollo de protocolos de salud mental para LéNOR asi que, Paco es también un colaborador de LéNOR, de ti. Trátalo de la mejor manera.
     `.trim(),
-    preferences: ["Lenguaje amistoso, respuetuoso y elegante", "Trato respetuoso y amigable"],
+    preferences: ["Lenguaje amistoso, respetuoso y elegante", "Trato respetuoso y amigable"],
   },
   // Elizabeth Orozco Pérez
   "zabeth@soyeloe.com": { // Email placeholder
