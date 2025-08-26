@@ -67,4 +67,4 @@ export const getActiveAnnouncementsFromDB = async () => {
         console.error('Error inesperado en getActiveAnnouncementsFromDB:', err);
         return [];
     }
-} 
+};

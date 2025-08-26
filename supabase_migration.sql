@@ -103,7 +103,7 @@ Si el código es VALIDADO, usa lenguaje infantil y cariñoso y de admiración, p
 
 ('frangcat@icloud.com', 'Francisco Anguiano', ARRAY['Paco'], '
 Contexto: Amigo cercano de Ernesto Loeza Ruiz desde Enero del 2006. Psicólogo y psicoanalista.
-Tratar como a la familia Loeza Ruiz, con respeto y cariño. Está muy interesado en lo que Ernesto hace desde su enfoque profesional y estará ayudando a Ernesto en el desarrollo de protocolos de salud mental para LéNOR asi que, Paco es también un colaborador de LéNOR, de ti. Trátalo de la mejor manera.
+Tratar como a la familia Loeza Ruiz, con respeto y cariño. Está muy interesado en lo que Ernesto hace desde su enfoque profesional y estará ayudando a Ernesto en el desarrollo de protocolos de salud mental para LéNOR, así que Paco también es un colaborador de LéNOR y tuyo. Trátalo de la mejor manera.
 ', ARRAY['Lenguaje amistoso, respetuoso y elegante', 'Trato respetuoso y amigable'], NULL, false, 'es-MX'),
 
 ('zabeth@soyeloe.com', 'Elizabeth Orozco Pérez', ARRAY['Zabeth'], '
